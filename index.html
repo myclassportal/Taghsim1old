@@ -1087,13 +1087,15 @@
             resetProductRow(idx) {
                 const rowP = getEl(`row-p-${idx}`);
                 if (rowP) {
-                    let sib = rowP.nextSibling;
-                    while (sib && (sib.classList.contains('subtraction-line') || sib.id === `row-r-${idx}`)) {
-                        let next = sib.nextSibling;
-                        sib.remove();
-                        sib = next;
+                    const line = rowP.nextElementSibling;
+                    if (line && line.classList && line.classList.contains('subtraction-line')) {
+                        line.remove();
                     }
                     rowP.remove();
+                }
+                const rowR = getEl(`row-r-${idx}`);
+                if (rowR) {
+                    rowR.remove();
                 }
                 this.mathSteps[idx].p = Array(4).fill('');
                 this.mathSteps[idx].r = Array(4).fill('');
@@ -1409,7 +1411,15 @@
 
             showBracket(idx) {
                 let startEl = null; let endEl = null; const targetInfo = this.getLatestTargetRow();
-                if (targetInfo.type === 'top') { let start = idx; for(let i = idx-1; i>=0; i--) { if (this.mathSteps[i].q === 0) start = i; else break; } startEl = getEl(`div-${start}`); endEl = getEl(`div-${idx}`); } 
+                if (targetInfo.type === 'top') { 
+                    let start = idx; 
+                    for(let i = idx-1; i>=0; i--) { 
+                        if (this.mathSteps[i].q === 0) start = i; 
+                        else break; 
+                    } 
+                    startEl = getEl(`div-${start}`); 
+                    endEl = getEl(`div-${idx}`); 
+                } 
                 else {
                     const rIdx = targetInfo.idx;
                     const rRow = getEl(`row-r-${rIdx}`);
@@ -1430,8 +1440,9 @@
                 if (!startEl || !endEl || !b || !panel) return;
                 const pRect = panel.getBoundingClientRect(); const d1Rect = startEl.getBoundingClientRect(); const d2Rect = endEl.getBoundingClientRect();
                 const left = d1Rect.left - pRect.left + panel.scrollLeft; const width = (d2Rect.left - d1Rect.left) + d2Rect.width;
+                b.className = `bracket-container ${CONFIG.pvClasses[idx]}`;
                 b.style.display = 'block'; b.style.left = `${left}px`; b.style.width = `${width}px`; 
-                const topOffset = d1Rect.top - pRect.top + panel.scrollTop; b.style.top = `${topOffset - 5}px`; b.style.borderColor = `var(--${CONFIG.pvClasses[idx].split('-')[1]})`;
+                const topOffset = d1Rect.top - pRect.top + panel.scrollTop; b.style.top = `${topOffset - 5}px`; b.style.borderColor = 'var(--pv-color)';
                 let lbl = b.querySelector('.bracket-label'); if(!lbl) { lbl = document.createElement('span'); lbl.className = 'bracket-label'; b.appendChild(lbl); } lbl.innerText = CONFIG.pvLabels[idx];
             },
             
