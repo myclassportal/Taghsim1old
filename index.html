@@ -21,9 +21,9 @@
         }
         * { box-sizing: border-box; touch-action: manipulation; user-select: none; -webkit-tap-highlight-color: transparent; font-family: 'Vazirmatn', sans-serif; }
         body { margin: 0; padding: 0; background-color: #f0f4f8; height: 100vh; display: flex; justify-content: center; align-items: center; overflow: hidden; }
-        .hidden { display: none !important; }
         .screen { display: none !important; }
         .screen.active { display: block !important; }
+        .hidden { display: none !important; }
         #portal-submitting-screen.active { display: flex !important; }
         #screen-assistant.active { display: block !important; }
         .container { background: #ffffff; padding: 20px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); width: 100%; max-width: 600px; text-align: center; position: relative; }
@@ -211,32 +211,28 @@
         </div>
 
         <div class="screen" id="screen-game">
-            <div id="top-ui-container">
-                <button id="help-button" class="btn btn-warning" onclick="game.requestHelp()">💡</button> 
-                <div id="game-message" class="game-message"></div>
+            <div id="carryOverBox" class="carry-over-container" style="display:none;">
+                <input type="tel" inputmode="numeric" id="carry_0" class="carry-input" oninput="handleCarryInput(this)" onclick="toggleStrike(this)">
+                <input type="tel" inputmode="numeric" id="carry_1" class="carry-input" oninput="handleCarryInput(this)" onclick="toggleStrike(this)">
+                <input type="tel" inputmode="numeric" id="carry_2" class="carry-input" oninput="handleCarryInput(this)" onclick="toggleStrike(this)">
+                <button id="clearCarryBtn" class="btn btn-eraser btn-hidden carry-clear-btn" onclick="resetCarryOver()">🧹</button>
             </div>
 
-            <div class="game-area">
-                <div class="left-panel" id="left-panel">
-                    <div id="bracket" class="bracket-container"></div>
-                    <div class="row-container" id="dividend-row" dir="ltr"></div>
-                    <div id="math-area" style="width: 100%; display: flex; flex-direction: column; align-items: flex-end;"></div>
-                </div>
-
-                <div class="vertical-line"></div> 
-
-                <div class="right-panel">
-                    <div style="font-size: 2rem; font-weight: bold; margin-bottom: 5px;" id="divisor-display"></div>
-                    <div class="horizontal-line"></div> 
-                    <div class="row-container" id="quotient-row" dir="ltr" style="margin-top: 5px;"></div>
-                    <div style="width: 100%; margin-top: 20px; padding: 0 5px;" id="game-controls">
-                        <button id="btn-check" class="btn btn-success" style="width: 100%; font-size:1.1rem;" disabled onclick="game.checkCurrentStep()">✅ بررسی</button>
-                    </div>
-                </div>
+            <div class="stats-bar">
+                <span id="dispName">دانش‌آموز</span>
+                <span>⭐ ستاره: <span id="dispStars">۰</span></span>
             </div>
 
-            <div id="tutorial-controls" class="hidden">
-                <button class="btn btn-tutorial" onclick="game.stepTutorial()">👇 مرحله بعد (آموزشی)</button>
+            <h2>تقسیم بر یک رقمی (قدیم)</h2>
+
+            <div id="game-area"></div>
+
+            <div id="hintAlertBox" class="hint-alert"></div>
+
+            <div style="margin-top: 20px; display: flex; justify-content: center; gap: 8px; flex-wrap: wrap;">
+                <button id="hintBtn" class="btn btn-secondary" onclick="revealOneStepHint()">راهنمای گام‌به‌گام 💡</button>
+                <button id="finishBtn" class="btn btn-hidden" style="background:#7f8c8d;" onclick="finishSession()">ثبت امتیاز و مشاهده کارنامه 🏆</button>
+                <button id="newQBtn" class="btn btn-info btn-hidden" onclick="newQuestion()">سوال بعدی 🎮</button>
             </div>
         </div>
 
@@ -256,7 +252,8 @@
                 </div>
                 <div id="portal-back-instruction" style="display:none; width: 100%;"></div>
 
-                <button id="playAgainBtn" class="btn" style="background:#34495e; width:100%; margin-top:10px;" onclick="restartGame()">🔄 تلاش دوباره</button>
+                <br>
+                <button id="playAgainBtn" class="btn" onclick="restartGame()">تلاش دوباره 🔄</button>
             </div>
         </div>
 
@@ -377,8 +374,12 @@
         };
 
         let state = {
-            name: "", stars: 0, totalPlays: 0,
-            lastHelp: false, isTutorial: false, reportShown: false,
+            user: null,
+            stats: { games: 0, stars: 0 },
+            lastHelp: false,
+            isTutorial: false,
+            reportShown: false,
+            whatsappSent: false,
             currentScreen: 'register'
         };
 
@@ -386,9 +387,10 @@
             const stored = localStorage.getItem(STORAGE);
             if (stored) {
                 try { 
-                    const parsed = JSON.parse(stored); 
+                    const parsed = JSON.parse(stored);
                     if (parsed && typeof parsed === 'object') {
                         state = parsed;
+                        if (!state.stats) state.stats = { games: 0, stars: 0 };
                         if (typeof state.isTutorial === 'undefined') state.isTutorial = false;
                         if (typeof state.currentScreen === 'undefined') state.currentScreen = 'register';
                     }
@@ -396,8 +398,8 @@
             }
         }
 
-        function saveProfile() { 
-            localStorage.setItem(STORAGE, JSON.stringify(state)); 
+        function saveProfile() {
+            localStorage.setItem(STORAGE, JSON.stringify(state));
         }
 
         function saveGameState() {
@@ -463,53 +465,55 @@
                 target.classList.add('active');
                 target.style.display = '';
             }
-        }
-
-        function updateStats() {
-            if(state.name) { 
-                getEl('disp-name').innerText = state.name; 
-                getEl('disp-games').innerText = toPersian(state.totalPlays); 
-                getEl('disp-stars').innerText = toPersian(state.stars); 
+            const carryBox = getEl('carryOverBox');
+            if (carryBox) {
+                carryBox.style.display = (id === 'screen-game') ? 'flex' : 'none';
             }
         }
 
-        function restartGame() {
+        function restartGame() { 
             state.currentScreen = 'game';
             saveProfile();
             showScreen('screen-game');
-            updateStats();
+            app.updateStats();
             game.start();
         }
 
         async function finishGame(success) {
-            const earnedThisGame = (game.helpUsed || state.isTutorial) ? 0 : 1;
-            state.totalPlays = state.totalPlays + 1;
-            if (success && earnedThisGame === 1) {
-                state.stars = state.stars + 1;
-            }
-            state.lastHelp = (game.helpUsed || state.isTutorial);
-            state.reportShown = true;
-            state.currentScreen = 'report';
-
-            clearGameState();
-            saveProfile();
-
-            showScreen('portal-submitting-screen');
-            await Portal.submitProgress(earnedThisGame, {
-                onSuccess: (data) => {
-                    state.totalPlays = data.plays;
-                    state.stars = data.stars;
-                    saveProfile();
-                    updateStats();
-                    showScreen('screen-report');
-                    app.renderReport(data.goalReached, data.stars);
-                },
-                onFailure: (err) => {
+            try {
+                const earnedThisGame = (game.helpUsed || state.isTutorial) ? 0 : 1;
+                state.stats.games = state.stats.games + 1;
+                if (success && earnedThisGame === 1) {
+                    state.stats.stars = state.stats.stars + 1;
                 }
-            });
+                state.lastHelp = (game.helpUsed || state.isTutorial);
+                state.reportShown = true;
+                state.currentScreen = 'report';
+
+                clearGameState();
+                saveProfile();
+
+                showScreen('portal-submitting-screen');
+                await Portal.submitProgress(earnedThisGame, {
+                    onSuccess: (data) => {
+                        state.stats.games = data.plays;
+                        state.stats.stars = data.stars;
+                        saveProfile();
+                        app.updateStats();
+                        showScreen('screen-report');
+                        app.renderReport(data.goalReached, data.stars);
+                    },
+                    onFailure: (err) => {
+                    }
+                });
+            } catch (e) {
+                console.error(e);
+            }
         }
 
         const app = {
+            get state() { return state; },
+            set state(val) { state = val; },
             init() {
                 loadProfile();
             },
@@ -517,30 +521,8 @@
                 saveProfile(); 
             },
             registerUser() {
-                try {
-                    state.isTutorial = false;
-                    state.reportShown = false;
-                    state.currentScreen = 'game';
-                    const activeState = checkSavedUnfinishedState();
-                    if (activeState) {
-                        loadState();
-                        game.loadState();
-                    } else {
-                        game.start();
-                    }
-                    showScreen('screen-game');
-                    this.updateStats();
-                    saveProfile();
-                } catch (e) {
-                    clearGameState();
-                    state.isTutorial = false;
-                    state.currentScreen = 'game';
-                    saveProfile();
-                    game.start();
-                    showScreen('screen-game');
-                    this.updateStats();
-                    saveProfile();
-                }
+                const startBtn = getEl('startGame');
+                if (startBtn) startBtn.click();
             },
             showScreen(id) {
                 showScreen(id);
@@ -549,67 +531,77 @@
                 if (id !== 'screen-game') game.hideNumberPad();
             },
             updateStats() {
-                updateStats();
+                if(state.user) { 
+                    getEl('disp-name').innerText = state.user; 
+                    getEl('disp-games').innerText = toPersian(state.stats.games); 
+                    getEl('disp-stars').innerText = toPersian(state.stats.stars); 
+                }
             },
             renderReport(goalReached, currentStars) {
-                const stars = Portal.isPortalMode ? currentStars : state.stars;
-                const games = state.totalPlays;
-                const now = new Date();
-                const dateTimeStr = toPersian(now.toLocaleDateString('fa-IR', { year: 'numeric', month: '2-digit', day: '2-digit' })) + ' ' + toPersian(now.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+                try {
+                    const stars = Portal.isPortalMode ? currentStars : state.stats.stars;
+                    const games = state.stats.games;
+                    const now = new Date();
+                    const dateStr = now.toLocaleDateString('fa-IR', { year: 'numeric', month: '2-digit', day: '2-digit' });
+                    const timeStr = now.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                    const dateTimeStr = toPersian(dateStr) + ' ' + toPersian(timeStr);
 
-                getEl('rep-name').innerText = state.name; 
-                getEl('rep-time').innerText = dateTimeStr; 
-                getEl('rep-games').innerText = toPersian(games); 
-                getEl('rep-stars').innerText = toPersian(stars);
+                    getEl('rep-name').innerText = state.user; 
+                    getEl('rep-time').innerText = dateTimeStr; 
+                    getEl('rep-games').innerText = toPersian(games); 
+                    getEl('rep-stars').innerText = toPersian(stars);
 
-                const repReqStarsRow = getEl('portal-req-stars-row');
-                if (repReqStarsRow) {
-                    repReqStarsRow.style.display = 'block';
-                    getEl('repReqStars').innerText = toPersian(Portal.requiredStars) + ' ⭐';
-                }
+                    const repReqStarsRow = getEl('portal-req-stars-row');
+                    if (repReqStarsRow) {
+                        repReqStarsRow.style.display = 'block';
+                        getEl('repReqStars').innerText = toPersian(Portal.requiredStars) + ' ⭐';
+                    }
 
-                const goalBadge = getEl('portal-goal-reached-badge');
-                const submitBadge = getEl('portal-submit-badge');
-                const backInstruction = getEl('portal-back-instruction');
-                const playAgainBtn = getEl('playAgainBtn');
+                    const goalBadge = getEl('portal-goal-reached-badge');
+                    const submitBadge = getEl('portal-submit-badge');
+                    const backInstruction = getEl('portal-back-instruction');
+                    const playAgainBtn = getEl('playAgainBtn');
 
-                goalBadge.style.display = 'none';
-                submitBadge.style.display = 'none';
-                backInstruction.style.display = 'none';
-                playAgainBtn.style.display = 'block';
+                    goalBadge.style.display = 'none';
+                    submitBadge.style.display = 'none';
+                    backInstruction.style.display = 'none';
+                    playAgainBtn.style.display = 'block';
 
-                if (state.isTutorial || state.lastHelp) {
-                    getEl('rep-help').innerText = 'با کمک یا آموزشی';
-                    playAgainBtn.innerText = "بازی دوباره بدون کمک 💡";
-                    backInstruction.innerHTML = `
-                        <div style="background:#fff3e0; border:1px solid #ffe082; color:#e65100; padding:12px; border-radius:12px; margin-top:10px; font-size:11.5pt; line-height:1.6; text-align:center;">
-                            💡 این دور بازی‌ات آموزشی بود و برای گرفتن ستاره باید بدون کمک حلش کنی. دکمه پایین رو بزن تا بدون کمک تلاش کنی!
-                        </div>
-                    `;
-                    backInstruction.style.display = 'block';
-                } else if (goalReached) {
-                    getEl('rep-help').innerText = 'مستقل';
-                    goalBadge.style.display = 'block';
-                    playAgainBtn.style.display = 'none';
-                    backInstruction.innerHTML = `
-                        <div style="background:#e8f5e9; border:1px solid #2e7d32; color:#1b5e20; padding:15px; border-radius:12px; margin-top:10px; font-weight:bold; font-size:12pt; line-height:1.6; text-align:center;">
-                            📱 آفرین! تکلیف با موفقیت تکمیل شد.<br>
-                            حالا با زدن <b>دکمه بازگشت (Back) گوشی</b> به پرتال کلاس برگرد.
-                        </div>
-                    `;
-                    backInstruction.style.display = 'block';
-                } else {
-                    getEl('rep-help').innerText = 'مستقل';
-                    const remaining = Portal.requiredStars - stars;
-                    submitBadge.innerHTML = `✨ آفرین دانش‌آموز زرنگم! تو <b>${toPersian(stars)}</b> ستاره از <b>${toPersian(Portal.requiredStars)}</b> ستاره‌ی این تکلیف رو گرفتی! ⭐ فقط به <b>${toPersian(remaining)}</b> ستاره‌ی دیگه نیاز داری تا تیک تکلیف بخوره. بدو برو بعدی رو حل کن! 🏆`;
-                    submitBadge.style.display = 'block';
-                    playAgainBtn.innerText = "گرفتن ستاره بیشتر 🎮";
-                    backInstruction.innerHTML = `
-                        <div style="background:#fff3e0; border:1px solid #ffe082; color:#e65100; padding:12px; border-radius:12px; margin-top:10px; font-size:11.5pt; line-height:1.6; text-align:center;">
-                            💡 اگر می‌خواهی بعداً بازی کنی، با زدن <b>دکمه بازگشت (Back) گوشی</b> به پرتال برگرد.
-                        </div>
-                    `;
-                    backInstruction.style.display = 'block';
+                    if (state.isTutorial || state.lastHelp) {
+                        getEl('rep-help').innerText = 'با کمک یا آموزشی';
+                        playAgainBtn.innerText = "بازی دوباره بدون کمک 💡";
+                        backInstruction.innerHTML = `
+                            <div style="background:#fff3e0; border:1px solid #ffe082; color:#e65100; padding:12px; border-radius:12px; margin-top:10px; font-size:11.5pt; line-height:1.6; text-align:center;">
+                                💡 این دور بازی‌ات آموزشی بود و برای گرفتن ستاره باید بدون کمک حلش کنی. دکمه پایین رو بزن تا بدون کمک تلاش کنی!
+                            </div>
+                        `;
+                        backInstruction.style.display = 'block';
+                    } else if (goalReached) {
+                        getEl('rep-help').innerText = 'مستقل';
+                        goalBadge.style.display = 'block';
+                        playAgainBtn.style.display = 'none';
+                        backInstruction.innerHTML = `
+                            <div style="background:#e8f5e9; border:1px solid #2e7d32; color:#1b5e20; padding:15px; border-radius:12px; margin-top:10px; font-weight:bold; font-size:12pt; line-height:1.6; text-align:center;">
+                                📱 آفرین! تکلیف با موفقیت تکمیل شد.<br>
+                                حالا با زدن <b>دکمه بازگشت (Back) گوشی</b> به پرتال کلاس برگرد.
+                            </div>
+                        `;
+                        backInstruction.style.display = 'block';
+                    } else {
+                        getEl('rep-help').innerText = 'مستقل';
+                        const remaining = Portal.requiredStars - stars;
+                        submitBadge.innerHTML = `✨ آفرین دانش‌آموز زرنگم! تو <b>${toPersian(stars)}</b> ستاره از <b>${toPersian(Portal.requiredStars)}</b> ستاره‌ی این تکلیف رو گرفتی! ⭐ فقط به <b>${toPersian(remaining)}</b> ستاره‌ی دیگه نیاز داری تا تیک تکلیف بخوره. بدو برو بعدی رو حل کن! 🏆`;
+                        submitBadge.style.display = 'block';
+                        playAgainBtn.innerText = "گرفتن ستاره بیشتر 🎮";
+                        backInstruction.innerHTML = `
+                            <div style="background:#fff3e0; border:1px solid #ffe082; color:#e65100; padding:12px; border-radius:12px; margin-top:10px; font-size:11.5pt; line-height:1.6; text-align:center;">
+                                💡 اگر می‌خواهی بعداً بازی کنی، با زدن <b>دکمه بازگشت (Back) گوشی</b> به پرتال برگرد.
+                            </div>
+                        `;
+                        backInstruction.style.display = 'block';
+                    }
+                } catch (e) {
+                    console.error(e);
                 }
             }
         };
@@ -950,7 +942,7 @@
                     if (userNum === prod) {
                          visibleBoxes.forEach(b => { b.classList.add('correct', 'readonly'); b.classList.remove('wrong', 'active-input'); });
                          getEl('btn-check').disabled = true; this.subStep = 'SUBTRACT'; 
-                         if(state.isTutorial) this.msg('حاله باید تفریق کنی.'); else this.msg('آفرین. تفریق کن (از راست).'); 
+                         if(state.isTutorial) this.msg('حالا باید تفریق کنی.'); else this.msg('آفرین. تفریق کن (از راست).'); 
                          
                          let rRow = getEl(`row-r-${this.stage}`);
                          const rBoxes = Array.from(rRow.querySelectorAll('.box:not(.invisible-box)'));
@@ -1211,10 +1203,10 @@
         }
 
         function updateStats() {
-            if(state.name) { 
-                getEl('disp-name').innerText = state.name; 
-                getEl('disp-games').innerText = toPersian(state.totalPlays); 
-                getEl('disp-stars').innerText = toPersian(state.stars); 
+            if(state.user) { 
+                getEl('disp-name').innerText = state.user; 
+                getEl('disp-games').innerText = toPersian(state.stats.games); 
+                getEl('disp-stars').innerText = toPersian(state.stats.stars); 
             }
         }
 
@@ -1229,9 +1221,9 @@
         async function finishGame(success) {
             try {
                 const earnedThisGame = (game.helpUsed || state.isTutorial) ? 0 : 1;
-                state.totalPlays = state.totalPlays + 1;
+                state.stats.games = state.stats.games + 1;
                 if (success && earnedThisGame === 1) {
-                    state.stars = state.stars + 1;
+                    state.stats.stars = state.stats.stars + 1;
                 }
                 state.lastHelp = (game.helpUsed || state.isTutorial);
                 state.reportShown = true;
@@ -1243,8 +1235,8 @@
                 showScreen('portal-submitting-screen');
                 await Portal.submitProgress(earnedThisGame, {
                     onSuccess: (data) => {
-                        state.totalPlays = data.plays;
-                        state.stars = data.stars;
+                        state.stats.games = data.plays;
+                        state.stats.stars = data.stars;
                         saveProfile();
                         updateStats();
                         showScreen('screen-report');
@@ -1259,6 +1251,8 @@
         }
 
         const app = {
+            get state() { return state; },
+            set state(val) { state = val; },
             init() {
                 loadProfile();
             },
@@ -1266,30 +1260,8 @@
                 saveProfile(); 
             },
             registerUser() {
-                try {
-                    state.isTutorial = false;
-                    state.reportShown = false;
-                    state.currentScreen = 'game';
-                    const activeState = checkSavedUnfinishedState();
-                    if (activeState) {
-                        loadState();
-                        game.loadState();
-                    } else {
-                        game.start();
-                    }
-                    showScreen('screen-game');
-                    this.updateStats();
-                    saveProfile();
-                } catch (e) {
-                    clearGameState();
-                    state.isTutorial = false;
-                    state.currentScreen = 'game';
-                    saveProfile();
-                    game.start();
-                    showScreen('screen-game');
-                    this.updateStats();
-                    saveProfile();
-                }
+                const startBtn = getEl('startGame');
+                if (startBtn) startBtn.click();
             },
             showScreen(id) {
                 showScreen(id);
@@ -1298,16 +1270,22 @@
                 if (id !== 'screen-game') game.hideNumberPad();
             },
             updateStats() {
-                updateStats();
+                if(state.user) { 
+                    getEl('disp-name').innerText = state.user; 
+                    getEl('disp-games').innerText = toPersian(state.stats.games); 
+                    getEl('disp-stars').innerText = toPersian(state.stats.stars); 
+                }
             },
             renderReport(goalReached, currentStars) {
                 try {
-                    const stars = Portal.isPortalMode ? currentStars : state.stars;
-                    const games = state.totalPlays;
+                    const stars = Portal.isPortalMode ? currentStars : state.stats.stars;
+                    const games = state.stats.games;
                     const now = new Date();
-                    const dateTimeStr = toPersian(now.toLocaleDateString('fa-IR', { year: 'numeric', month: '2-digit', day: '2-digit' })) + ' ' + toPersian(now.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+                    const dateStr = now.toLocaleDateString('fa-IR', { year: 'numeric', month: '2-digit', day: '2-digit' });
+                    const timeStr = now.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                    const dateTimeStr = toPersian(dateStr) + ' ' + toPersian(timeStr);
 
-                    getEl('rep-name').innerText = state.name; 
+                    getEl('rep-name').innerText = state.user; 
                     getEl('rep-time').innerText = dateTimeStr; 
                     getEl('rep-games').innerText = toPersian(games); 
                     getEl('rep-stars').innerText = toPersian(stars);
@@ -1404,26 +1382,26 @@
                             if (typeof state.currentScreen === 'undefined') state.currentScreen = 'register';
                         } else {
                             state = {
-                                name: data.name,
-                                stars: data.stars,
-                                totalPlays: data.plays,
+                                user: data.name,
+                                stats: { games: data.plays, stars: data.stars },
                                 lastHelp: false,
                                 isTutorial: false,
                                 reportShown: false,
+                                whatsappSent: false,
                                 currentScreen: 'register'
                             };
                         }
                         
-                        state.name = data.name || Portal.studentName || state.name || "دانش‌آموز";
-                        state.totalPlays = data.plays !== undefined ? data.plays : state.totalPlays;
-                        state.stars = data.stars !== undefined ? data.stars : state.stars;
+                        state.user = data.name || Portal.studentName || state.user || "دانش‌آموز";
+                        state.stats.games = data.plays !== undefined ? data.plays : state.stats.games;
+                        state.stats.stars = data.stars !== undefined ? data.stars : state.stats.stars;
                         
                         saveProfile();
                         updateStats();
 
-                        getEl('portal-student-name').textContent = state.name;
-                        getEl('portal-prev-plays').textContent = toPersian(state.totalPlays);
-                        getEl('portal-prev-stars').textContent = toPersian(state.stars) + ' ⭐';
+                        getEl('portal-student-name').textContent = state.user;
+                        getEl('portal-prev-plays').textContent = toPersian(state.stats.games);
+                        getEl('portal-prev-stars').textContent = toPersian(state.stats.stars) + ' ⭐';
                         getEl('portal-req-stars').textContent = toPersian(Portal.requiredStars) + ' ⭐';
 
                         const activeState = checkSavedUnfinishedState();
@@ -1440,15 +1418,15 @@
                         const hasUnsentStar = localStorage.getItem(needsSubmitKey) === 'true';
 
                         if (hasUnsentStar) {
-                            getEl('ast-welcome').textContent = `سلام ${state.name} عزیز! 🌟`;
-                            getEl('ast-name').textContent = state.name;
-                            getEl('ast-stars').textContent = toPersian(state.stars) + ' ⭐';
+                            getEl('ast-welcome').textContent = `سلام ${state.user} عزیز! 🌟`;
+                            getEl('ast-name').textContent = state.user;
+                            getEl('ast-stars').textContent = toPersian(state.stats.stars) + ' ⭐';
                             getEl('ast-req-stars').textContent = toPersian(Portal.requiredStars) + ' ⭐';
                             showScreen('screen-assistant');
                         } else if (state.currentScreen === 'report') {
                             showScreen('screen-report');
-                            app.renderReport(state.stars >= Portal.requiredStars, state.stars);
-                        } else if (activeState) {
+                            app.renderReport(state.stats.stars >= Portal.requiredStars, state.stats.stars);
+                        } else if (state.currentProblem && activeState) {
                             try {
                                 showScreen('screen-game');
                                 loadState();
