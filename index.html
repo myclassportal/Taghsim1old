@@ -933,8 +933,11 @@
                     if (step.q !== null) { const qBox = getEl(`q-${idx}`); qBox.querySelector('.val').innerText = toPersian(step.q); qBox.classList.add('has-val', 'readonly', 'correct'); }
                     if (step.p.some(v => v !== '') || (idx === this.stage && this.subStep !== 'SELECT')) {
                         if (step.q !== 0 && step.q !== null) {
-                            this.createMathRows(idx); step.p.forEach((val, i) => { if (val !== '') setBoxVal(`p-${idx}-${i}`, val, (this.subStep !== 'MULTIPLY_P' || idx < this.stage)); });
-                            step.r.forEach((val, i) => { if (val !== '') setBoxVal(`r-${idx}-${i}`, val, (idx < this.stage)); });
+                            this.createProductRow(idx); step.p.forEach((val, i) => { if (val !== '') setBoxVal(`p-${idx}-${i}`, val, (this.subStep !== 'MULTIPLY_P' || idx < this.stage)); });
+                            if (idx < this.stage || this.subStep === 'SUBTRACT' || this.subStep === 'FINISH') {
+                                this.createRemainderRow(idx);
+                                step.r.forEach((val, i) => { if (val !== '') setBoxVal(`r-${idx}-${i}`, val, (idx < this.stage)); });
+                            }
                             if(idx < this.stage) { const pRow = getEl(`row-p-${idx}`); if(pRow) pRow.classList.add('dimmed'); }
                         }
                     }
@@ -969,7 +972,7 @@
                 else { return getEl(`r-${lastActive}-${colIdx}`); }
             },
 
-            createMathRows(idx) {
+            createProductRow(idx) {
                 if (getEl(`row-p-${idx}`)) return; this.lastRemRowIndex = idx; const container = getEl('math-area');
                 const rowP = document.createElement('div'); rowP.className = 'row-container'; rowP.id = `row-p-${idx}`; const op = document.createElement('div'); op.className = 'operator'; op.innerText = '-'; rowP.appendChild(op);
                 
@@ -983,6 +986,10 @@
                 }
                 container.appendChild(rowP);
                 const line = document.createElement('div'); line.className = 'subtraction-line'; container.appendChild(line);
+            },
+
+            createRemainderRow(idx) {
+                if (getEl(`row-r-${idx}`)) return; const container = getEl('math-area');
                 const rowR = document.createElement('div'); rowR.className = 'row-container'; rowR.id = `row-r-${idx}`;
                 
                 let workingVal = this.digits[0];
@@ -1070,7 +1077,7 @@
                 }
                 if (this.stage === 4) return this.msg('تمام شد.');
                 if (this.subStep !== 'SELECT') return this.msg('مرحله جاری رو کامل کن.', true);
-                if (idx !== this.stage) return this.msg(`نوبت رقم ${CONFIG.pvLabels[this.stage]} ist.`, true);
+                if (idx !== this.stage) return this.msg(`نوبت رقم ${CONFIG.pvLabels[this.stage]} است.`, true);
                 
                 if (idx > 0) {
                      let targetRowIdx = this.getLastActiveRowIdx(idx);
@@ -1206,7 +1213,7 @@
                     qBox.classList.remove('wrong');
                     
                     this.subStep = 'MULTIPLY_P';
-                    this.createMathRows(this.stage);
+                    this.createProductRow(this.stage);
                     this.msg('حاصلضرب خارج قسمت در مقسوم‌علیه را بنویس (از چپ).');
                     
                     const pRow = getEl(`row-p-${this.stage}`);
@@ -1269,7 +1276,7 @@
                             if(this.stage === 3) { this.msg('پایان تقسیم.'); this.subStep = 'FINISH'; } 
                             else { this.stage++; this.subStep = 'SELECT'; this.msg(`چون نمیشه، ۰ گذاشتیم. حالا رقم بعدی رو بیار پایین.`); this.updateSelectHighlight(); }
                         } else {
-                            this.createMathRows(this.stage); this.subStep = 'MULTIPLY_P'; this.msg('حالا جواب رو در مقسوم‌علیه ضرب می‌کنیم.'); 
+                            this.createProductRow(this.stage); this.subStep = 'MULTIPLY_P'; this.msg('حالا جواب رو در مقسوم‌علیه ضرب می‌کنیم.'); 
                         }
                      } else this.handleQuotientInput(val); 
                 } 
@@ -1434,7 +1441,11 @@
                          qBox.classList.add('correct', 'readonly');
                          qBox.classList.remove('wrong');
                          visibleBoxes.forEach(b => { b.classList.add('correct', 'readonly'); b.classList.remove('wrong', 'active-input'); });
-                         getEl('btn-check').disabled = true; this.subStep = 'SUBTRACT'; 
+                         getEl('btn-check').disabled = true; 
+                         this.subStep = 'SUBTRACT'; 
+                         
+                         this.createRemainderRow(this.stage);
+                         
                          if(app.state.isTutorial) this.msg('حالا باید تفریق کنی.'); else this.msg('آفرین. تفریق کن (از راست).'); 
                          
                          let rRow = getEl(`row-r-${this.stage}`);
@@ -1442,8 +1453,28 @@
                          if(rBoxes.length > 0 && !app.state.isTutorial) this.activate(rBoxes[rBoxes.length - 1].id);
                          this.isFailedStep = false;
                     } else {
-                         qBox.classList.add('wrong');
-                         visibleBoxes.forEach(b => b.classList.add('wrong')); 
+                         if (userQ === correctQ) {
+                             qBox.classList.add('correct');
+                             qBox.classList.remove('wrong');
+                         } else {
+                             qBox.classList.add('wrong');
+                             qBox.classList.remove('correct');
+                         }
+
+                         const expectedProd = userQ * this.divisor;
+                         const sExpectedProd = String(expectedProd).padStart(visibleBoxes.length, '0');
+                         visibleBoxes.forEach((b, i) => {
+                             const userDigit = toEnglish(b.innerText);
+                             const expectedDigit = sExpectedProd[i];
+                             if (userDigit === expectedDigit) {
+                                 b.classList.add('correct');
+                                 b.classList.remove('wrong');
+                             } else {
+                                 b.classList.add('wrong');
+                                 b.classList.remove('correct');
+                             }
+                         });
+
                          correct = false; 
                          this.isFailedStep = true;
                          this.msg('خارج قسمت یا حاصلضرب اشتباه است. دکمه پاک کردن را بزن و دوباره تلاش کن.', true);
@@ -1467,7 +1498,18 @@
                         }
                         this.isFailedStep = false;
                     } else { 
-                        visibleBoxes.forEach(b => b.classList.add('wrong')); 
+                        const sCorrectRem = String(rem).padStart(visibleBoxes.length, '0');
+                        visibleBoxes.forEach((b, i) => {
+                            const userDigit = toEnglish(b.innerText);
+                            const correctDigit = sCorrectRem[i];
+                            if (userDigit === correctDigit) {
+                                b.classList.add('correct');
+                                b.classList.remove('wrong');
+                            } else {
+                                b.classList.add('wrong');
+                                b.classList.remove('correct');
+                            }
+                        });
                         correct = false; 
                         this.isFailedStep = true;
                         this.msg('تفریق اشتباهه. دکمه پاک کردن را بزن و دوباره تلاش کن.', true); 
