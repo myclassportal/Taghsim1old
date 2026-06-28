@@ -1177,8 +1177,19 @@
                     if (idx !== this.stage) return; 
                     if (this.subStep === 'MULTIPLY_P') {
                         this.resetProductRow(idx);
+                        
+                        this.mathSteps[idx].q = null;
+                        const qBox = getEl(`q-${idx}`);
+                        if (qBox) {
+                            const valSpan = qBox.querySelector('.val');
+                            if (valSpan) valSpan.innerText = '';
+                            else qBox.innerText = '';
+                            qBox.classList.remove('has-val', 'wrong');
+                        }
+                        
                         this.subStep = 'QUOTIENT';
                         this.updateCheckBtn();
+                        this.msg('خارج قسمت را دوباره وارد کن.');
                     }
                     if (this.subStep !== 'QUOTIENT') return; 
                 }
@@ -1386,7 +1397,7 @@
                         this.currentRem = rem; this.stage++; this.subStep = 'SELECT'; getEl('bracket').style.display = 'none'; 
                         if (this.stage > 3) { this.msg('تمام شد! دکمه پایان رو بزن.'); this.subStep = 'FINISH'; this.updateCheckBtn(); } 
                         else { 
-                            if(app.state.isTutorial) this.msg('بریم سراغ رقم بعدی.'); else this.msg(`رقم بعدی (${CONFIG.pvLabels[this.stage]}) رو انتخاب کن.`); 
+                            if(app.state.isTutorial) { this.msg('بریم سراغ رقم بعدی.'); } else { this.msg(`رقم بعدی (${CONFIG.pvLabels[this.stage]}) رو انتخاب کن.`); }
                             this.updateSelectHighlight(); 
                         }
                     } else { visibleBoxes.forEach(b => b.classList.add('wrong')); correct = false; this.msg('تفریق اشتباهه.', true); }
