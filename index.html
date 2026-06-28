@@ -72,6 +72,11 @@
             background: #8e44ad !important;
             box-shadow: 0 3px 0 #6c3483 !important;
         } 
+        .btn-danger-reset {
+            background: #e74c3c !important;
+            box-shadow: 0 3px 0 #c0392b !important;
+            color: #fff !important;
+        }
         .btn-warning {
             background: #f1c40f;
             color: #333;
@@ -873,7 +878,7 @@
                 this.divisor = Math.floor(Math.random() * 8) + 2; this.dividend = Math.floor(Math.random() * 8000) + 1000;
                 this.digits = String(this.dividend).split('').map(Number); this.stage = 0; this.subStep = 'SELECT'; this.currentRem = 0; this.helpUsed = false;
                 this.mathSteps = Array(4).fill(null).map(() => ({ q: null, p: Array(4).fill(''), r: Array(4).fill('') })); this.lastRemRowIndex = -1;
-                const btn = getEl('btn-check'); btn.innerText = '✅ بررسی'; btn.classList.remove('btn-finish'); btn.classList.add('btn-success'); btn.disabled = true;
+                const btn = getEl('btn-check'); btn.innerText = '✅ بررسی'; btn.className = 'btn btn-success'; btn.disabled = true;
                 this.saveState(); this.renderUI(); 
                 this.resetToNormalUI();
                 this.msg('روی اولین رقم سمت چپ (هزارتایی) کلیک کن.');
@@ -1177,22 +1182,6 @@
                 if (parts[0] === 'q') { 
                     const idx = parseInt(parts[1]); 
                     if (idx !== this.stage) return; 
-                    if (this.subStep === 'MULTIPLY_P') {
-                        this.resetProductRow(idx);
-                        
-                        this.mathSteps[idx].q = null;
-                        const qBox = getEl(`q-${idx}`);
-                        if (qBox) {
-                            const valSpan = qBox.querySelector('.val');
-                            if (valSpan) valSpan.innerText = '';
-                            else qBox.innerText = '';
-                            qBox.classList.remove('has-val', 'wrong');
-                        }
-                        
-                        this.subStep = 'QUOTIENT';
-                        this.updateCheckBtn();
-                        this.msg('خارج قسمت را دوباره وارد کن.');
-                    }
                     if (this.subStep !== 'QUOTIENT') return; 
                 }
                 if (this.activeBox) getEl(this.activeBox).classList.remove('active-input'); this.activeBox = id; getEl(id).classList.add('active-input'); getEl('number-pad').classList.remove('hidden');
@@ -1342,9 +1331,9 @@
 
             updateCheckBtn() {
                 const btn = getEl('btn-check'); 
-                if (this.subStep === 'FINISH') { btn.innerText = '🏁 پایان'; btn.classList.add('btn-finish'); btn.classList.remove('btn-success'); btn.disabled = false; } 
+                if (this.subStep === 'FINISH') { btn.innerText = '🏁 پایان'; btn.className = 'btn btn-finish'; btn.disabled = false; } 
                 else {
-                    btn.innerText = '✅ بررسی'; btn.classList.remove('btn-finish'); btn.classList.add('btn-success');
+                    btn.innerText = '✅ بررسی'; btn.className = 'btn btn-success';
                     const full = this.isRowFull(); if ((this.subStep === 'MULTIPLY_P' || this.subStep === 'SUBTRACT') && full) { btn.disabled = false; this.msg('حالا دکمه بررسی رو بزن.'); } else { btn.disabled = true; }
                 }
             },
@@ -1440,9 +1429,10 @@
                 if (!startEl || !endEl || !b || !panel) return;
                 const pRect = panel.getBoundingClientRect(); const d1Rect = startEl.getBoundingClientRect(); const d2Rect = endEl.getBoundingClientRect();
                 const left = d1Rect.left - pRect.left + panel.scrollLeft; const width = (d2Rect.left - d1Rect.left) + d2Rect.width;
-                b.className = `bracket-container ${CONFIG.pvClasses[idx]}`;
                 b.style.display = 'block'; b.style.left = `${left}px`; b.style.width = `${width}px`; 
-                const topOffset = d1Rect.top - pRect.top + panel.scrollTop; b.style.top = `${topOffset - 5}px`; b.style.borderColor = 'var(--pv-color)';
+                const topOffset = d1Rect.top - pRect.top + panel.scrollTop; b.style.top = `${topOffset - 5}px`; 
+                b.className = `bracket-container ${CONFIG.pvClasses[idx]}`;
+                b.style.borderColor = 'var(--pv-color)';
                 let lbl = b.querySelector('.bracket-label'); if(!lbl) { lbl = document.createElement('span'); lbl.className = 'bracket-label'; b.appendChild(lbl); } lbl.innerText = CONFIG.pvLabels[idx];
             },
             
