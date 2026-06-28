@@ -1,0 +1,1278 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>تقسیم بر یک رقمی (قدیم)</title>
+    <script src="supabase.js" defer></script>
+    <script src="game-db.js" defer></script>
+    <style>
+        @font-face {
+            font-family: 'Vazirmatn';
+            src: url('Vazirmatn-Regular.woff2') format('woff2');
+            font-weight: normal;
+            font-style: normal;
+        }
+        @font-face {
+            font-family: 'Vazirmatn';
+            src: url('Vazirmatn-Bold.woff2') format('woff2');
+            font-weight: bold;
+            font-style: normal;
+        }
+        * { box-sizing: border-box; touch-action: manipulation; user-select: none; -webkit-tap-highlight-color: transparent; font-family: 'Vazirmatn', sans-serif; }
+        body { margin: 0; padding: 0; background-color: #f0f4f8; height: 100vh; display: flex; justify-content: center; align-items: center; overflow: hidden; }
+        .hidden { display: none !important; }
+        .screen { display: none !important; }
+        .screen.active { display: block !important; }
+        #portal-submitting-screen.active { display: flex !important; }
+        #screen-assistant.active { display: block !important; }
+        .container { background: #ffffff; padding: 20px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); width: 100%; max-width: 600px; text-align: center; position: relative; }
+        
+        .btn { background: #4a90e2; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-size: 1rem; cursor: pointer; box-shadow: 0 3px 0 #3a75b9; margin: 5px; font-weight: bold; transition: all 0.1s; }
+        .btn:active { transform: translateY(2px); box-shadow: none; }
+        .btn-success { background: #2ecc71; box-shadow: 0 3px 0 #27ae60; }
+        .btn-finish { background: #8e44ad !important; box-shadow: 0 3px 0 #6c3483 !important; } 
+        .btn-warning { background: #f1c40f; color: #333; padding: 8px 15px; font-size: 1.1rem; box-shadow: 0 3px 0 #d9ac00; }
+        
+        .btn-tutorial { background: #e67e22; color: white; width: 90%; font-size: 1.2rem; box-shadow: 0 4px 0 #d35400; animation: pulse-btn 2s infinite; }
+        @keyframes pulse-btn { 0% { transform: scale(1); } 50% { transform: scale(1.02); } 100% { transform: scale(1); } }
+
+        .btn[disabled] { background: #bdc3c7; cursor: not-allowed; box-shadow: none; opacity: 0.8; transform: none; animation: none; }
+        
+        #stats-bar { width: 100%; height: 50px; background: #34495e; color: white; display: flex; justify-content: space-between; align-items: center; padding: 0 15px; position: fixed; top: 0; left: 0; z-index: 900; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+        
+        #top-ui-container { 
+            width: 100%; 
+            display: flex; 
+            justify-content: center; 
+            align-items: flex-start; 
+            padding: 10px; 
+            margin-top: 50px; 
+            z-index: 1000; 
+            position: sticky; 
+            top: 0; 
+            background-color: #f0f4f8;
+            transition: all 0.3s;
+        }
+
+        .game-message { padding: 10px; background: #fdf6e3; border: 1px solid #f0ad4e; color: #8a6d3b; border-radius: 8px; width: 100%; max-width: 400px; text-align: center; font-size: 0.9rem; margin-left: 5px; font-weight: bold; min-height: 45px; display: flex; align-items: center; justify-content: center; }
+
+        .game-area { 
+            display: grid; 
+            grid-template-columns: 1fr 3px 1fr; 
+            width: 98%; 
+            max-width: 600px; 
+            margin-top: 15px; 
+            justify-content: center; 
+            direction: ltr !important; 
+        }
+        
+        .left-panel { display: flex; flex-direction: column; align-items: flex-end; padding-right: 5px; position: relative; }
+        .vertical-line { background: #333; height: 100%; min-height: 400px; border-radius: 2px; }
+        .right-panel { display: flex; flex-direction: column; align-items: center; padding: 0; }
+        .horizontal-line { width: 100%; height: 3px; background: #333; margin: 8px 0; border-radius: 0 2px 2px 0; }
+        
+        .row-container { 
+            display: flex; direction: ltr !important; margin-bottom: 6px; 
+            position: relative; width: fit-content;
+            transition: opacity 0.5s;
+        }
+        .row-container.dimmed { opacity: 0.4; filter: grayscale(100%); pointer-events: none; }
+
+        .box { width: 38px; height: 38px; border: 2px solid #bdc3c7; border-radius: 8px; margin: 2px; display: flex; justify-content: center; align-items: center; font-size: 1.4rem; font-weight: bold; background: white; color: #333; cursor: pointer; position: relative; transition: all 0.2s; }
+        .box.readonly { background: #ecf0f1; cursor: default; }
+        .box.active-input { border-color: #3498db; background: #eaf2f8; box-shadow: 0 0 10px rgba(52,152,219,0.4); transform: scale(1.05); z-index: 10; }
+        .box.correct { background-color: #d4edda; border-color: #28a745; color: #155724; }
+        .box.wrong { background-color: #f8d7da; border-color: #dc3545; color: #721c24; animation: shake 0.3s; }
+        
+        .box.shake { animation: shake 0.4s ease-in-out; border-color: #e74c3c; }
+        @keyframes shake {
+            0% { transform: translateX(0); } 25% { transform: translateX(-5px); }
+            50% { transform: translateX(5px); } 75% { transform: translateX(-5px); } 100% { transform: translateX(0); }
+        }
+
+        .box.invisible-box { opacity: 0; pointer-events: none; border: none; }
+
+        .box.action-target {
+            background-color: #fff3cd !important;
+            border-color: #ffc107 !important;
+            cursor: pointer !important;
+            z-index: 5;
+            animation: pulse-border 1.5s infinite;
+        }
+
+        .box.borrow-src, .box.borrow-dest {
+            z-index: 100 !important; 
+            color: #aaa; 
+        }
+
+        .box.borrow-src::after, .box.borrow-dest::after {
+            content: ''; position: absolute; width: 80%; height: 2px; background: #e74c3c;
+            top: 50%; left: 10%; transform: rotate(-45deg); pointer-events: none;
+            z-index: 101;
+        }
+        
+        .box.borrow-src::before {
+            content: attr(data-val-sub); 
+            position: absolute; top: -16px; left: 50%; transform: translateX(-50%);
+            font-size: 1rem; color: #e74c3c; font-weight: bold; background: rgba(255,255,255,0.95);
+            padding: 0 4px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.2); pointer-events: none; 
+            z-index: 102; border: 1px solid #e74c3c;
+        }
+
+        .box.borrow-dest::before {
+            content: attr(data-val-dest); 
+            position: absolute; top: -16px; left: 50%; transform: translateX(-50%);
+            font-size: 1rem; color: #e74c3c; font-weight: bold; background: rgba(255,255,255,0.95);
+            padding: 0 4px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.2); pointer-events: none; 
+            z-index: 102; border: 1px solid #e74c3c;
+        }
+
+        @keyframes pulse-border {
+            0% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.7); transform: scale(1); }
+            50% { transform: scale(1.05); }
+            70% { box-shadow: 0 0 0 6px rgba(255, 193, 7, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0); transform: scale(1); }
+        }
+        
+        .operator { position: absolute; left: -30px; top: 2px; font-weight: bold; font-size: 1.8rem; color: #333; width: 25px; text-align: center; }
+        .subtraction-line { width: 100%; height: 2px; background: #7f8c8d; margin: 4px 0; }
+        .pv-label { position: absolute; font-size: 0.7rem; color: #999; pointer-events: none; opacity: 1; font-family: 'Vazirmatn'; }
+        .box.has-val .pv-label { opacity: 0; }
+        #bracket { position: absolute; top: -20px; height: 15px; border-style: solid; border-width: 3px 3px 0 3px; border-radius: 8px 8px 0 0; z-index: 20; display: none; direction: ltr; pointer-events: none; transition: all 0.3s ease-in-out; }
+        .bracket-label { position: absolute; top: -22px; left: 50%; transform: translateX(-50%); font-size: 0.75rem; font-weight: bold; background: #fff; padding: 0 4px; }
+        .color-h { --pv-color: #3498db; } .color-s { --pv-color: #f39c12; } .color-d { --pv-color: #9b59b6; } .color-y { --pv-color: #1abc9c; }
+        .box-active-pv { color: var(--pv-color); border-color: var(--pv-color) !important; }
+        #number-pad { position: fixed; bottom: 10px; right: 10px; width: 180px; background: rgba(255, 255, 255, 0.98); padding: 10px; border-radius: 12px; box-shadow: 0 0 20px rgba(0,0,0,0.25); display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; z-index: 2000; border: 1px solid #ccc; direction: ltr; }
+        #number-pad button { background: #fff; border: 1px solid #bbb; padding: 12px 0; border-radius: 8px; font-size: 1.4rem; font-weight: bold; box-shadow: 0 3px 0 #999; color: #333; }
+        #number-pad button:active { transform: translateY(2px); box-shadow: none; background: #eee; }
+        #pad-zero { grid-column: 2 / 3; }
+        #pad-close { background: #34495e !important; color: #fff !important; border-color: #2c3e50; font-size: 1rem !important; box-shadow: 0 3px 0 #222 !important; } 
+        #pad-clear { background: #e74c3c !important; color: #fff !important; border-color: #c0392b; font-size: 1rem !important; box-shadow: 0 3px 0 #900 !important; } 
+        #screen-register { text-align: center; }
+        .report-card { background: #fff; padding: 20px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); max-width: 350px; width: 90%; text-align: right; margin: 0 auto; }
+        .report-item { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px dotted #eee; }
+        .report-item span:first-child { font-weight: bold; color: #555; }
+
+        #modal-confirm { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 3000; display: flex; justify-content: center; align-items: center; }
+        .modal-content { background: #fff; width: 85%; max-width: 320px; padding: 20px; border-radius: 15px; text-align: center; box-shadow: 0 10px 25px rgba(0,0,0,0.3); }
+        .modal-title { font-size: 1.2rem; font-weight: bold; color: #e74c3c; margin-bottom: 15px; }
+        .modal-text { font-size: 1rem; color: #555; margin-bottom: 20px; line-height: 1.6; }
+        #tutorial-controls { position: fixed; bottom: 20px; left: 0; width: 100%; display: flex; justify-content: center; z-index: 2100; }
+    </style>
+</head>
+<body>
+
+    <div id="stats-bar" class="screen">
+        <div>👤 <span id="disp-name">-</span></div>
+        <div style="display:flex; gap:15px;">
+            <span>🎮 <span id="disp-games">۰</span></span>
+            <span>⭐ <span id="disp-stars">۰</span></span>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="screen active" id="screen-register">
+            <span class="school-name" id="portal-school-title">دبستان معاد خرگوشی</span>
+            
+            <div id="register-container">
+                <div id="portal-welcome-section">
+                    <h1 style="color:#2c3e50; font-size:1.5rem; margin-bottom:10px;">سلام دانش‌آموز زرنگم! 🌟</h1>
+                    <p style="color:#555; margin-bottom:15px; font-size:0.95em;">بیا با هم تقسیم بر یک رقمی رو تمرین کنیم و ستاره بگیریم!</p>
+                    
+                    <div style="display: flex; flex-direction: column; gap: 10px; background: #f8f9fa; border-radius: 10px; padding: 15px; border: 1px dashed #bdc3c7; margin: 15px auto; text-align: right; direction: rtl; font-size: 1rem; width: 100%; max-width: 280px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <span>👤 نامت:</span>
+                            <span id="portal-student-name" style="font-weight:bold; color:#2c3e50;">---</span>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <span>🎮 تعداد تلاش‌های قبلی:</span>
+                            <span id="portal-prev-plays" style="font-weight:bold; color:#e67e22;">۰</span>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <span>⭐ ستاره‌های ثبت‌شده:</span>
+                            <span id="portal-prev-stars" style="font-weight:bold; color:#f39c12;">۰ ⭐</span>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; align-items:center; font-weight:bold; color:#27ae60; border-top:1px dashed #bdc3c7; padding-top:8px; margin-top:5px;">
+                            <span>🎯 ستاره مورد نیاز تکلیف:</span>
+                            <span id="portal-req-stars">۰ ⭐</span>
+                        </div>
+                    </div>
+                </div>
+                <button id="startGame" style="background:#2ecc71; color:white; padding:12px 20px; border:none; border-radius:10px; cursor:pointer; width:100%; max-width:250px; display:block; margin:20px auto 0; font-weight: bold; font-size: 1.1rem; transition: background 0.3s;">شروع بازی تکلیف 🎮</button>
+            </div>
+
+            <div id="portal-error-section" style="display:none; text-align:center; padding:20px; max-width: 450px; margin: 20px auto; background: white; border-radius: 12px; box-shadow:0 6px 18px rgba(0,0,0,0.12);">
+                <div style="font-size:2.5rem; margin-bottom:10px;">⚠️</div>
+                <h3 id="portal-error-title" style="color:#d32f2f; margin-bottom:8px; font-weight:bold; font-size:15pt;">خطا در اتصال به پرتال کلاس</h3>
+                <p id="portal-error-desc" style="color:#555; font-size:12pt; margin-bottom:15px; line-height:1.6;">جهت بارگذاری مشخصات و تکالیفت، اتصال به اینترنت الزامی است. لطفا شبکه‌ات را بررسی کن و مجدداً تلاش کن.</p>
+                <button id="portal-retry-auth-btn" style="background:#1e90ff; color: white; padding: 10px 20px; border: none; border-radius: 10px; font-weight: bold; cursor: pointer;" onclick="retryAuthentication()">🔄 تلاش مجدد برای اتصال</button>
+            </div>
+        </div>
+
+        <div class="screen" id="screen-game">
+            <div id="top-ui-container">
+                <button id="help-button" class="btn btn-warning" onclick="game.requestHelp()">💡</button> 
+                <div id="game-message" class="game-message"></div>
+            </div>
+
+            <div class="game-area">
+                <div class="left-panel" id="left-panel">
+                    <div id="bracket" class="bracket-container"></div>
+                    <div class="row-container" id="dividend-row" dir="ltr"></div>
+                    <div id="math-area" style="width: 100%; display: flex; flex-direction: column; align-items: flex-end;"></div>
+                </div>
+
+                <div class="vertical-line"></div> 
+
+                <div class="right-panel">
+                    <div style="font-size: 2rem; font-weight: bold; margin-bottom: 5px;" id="divisor-display"></div>
+                    <div class="horizontal-line"></div> 
+                    <div class="row-container" id="quotient-row" dir="ltr" style="margin-top: 5px;"></div>
+                    <div style="width: 100%; margin-top: 20px; padding: 0 5px;" id="game-controls">
+                        <button id="btn-check" class="btn btn-success" style="width: 100%; font-size:1.1rem;" disabled onclick="game.checkCurrentStep()">✅ بررسی</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="tutorial-controls" class="hidden">
+                <button class="btn btn-tutorial" onclick="game.stepTutorial()">👇 مرحله بعد (آموزشی)</button>
+            </div>
+        </div>
+
+        <div class="screen" id="screen-report">
+            <div class="report-card">
+                <div class="report-item"><span>نام تمرین:</span><span>تقسیم بر یک رقمی (قدیم)</span></div>
+                <div class="report-item"><span>دانش‌آموز:</span><span id="rep-name"></span></div>
+                <div class="report-item"><span>زمان:</span><span id="rep-time" style="direction: ltr; font-size:0.9rem;"></span></div>
+                <div class="report-item"><span>تعداد تلاش‌ها:</span><span id="rep-games"></span></div>
+                <div class="report-item"><span>ستاره‌های گرفته‌شده:</span><span>⭐ <span id="rep-stars"></span></span></div>
+                <div class="report-item" id="portal-req-stars-row" style="display:none;"><strong>🎯 ستاره مورد نیاز تکلیف:</strong> <span id="repReqStars">۰ ⭐</span></div>
+                <div class="report-item"><span>وضعیت:</span><span id="rep-help"></span></div>
+                
+                <div id="portal-submit-badge" style="display:none; background:#fff3e0; border:1px solid #ffe082; color:#e65100; padding:15px; border-radius:12px; margin-bottom:12px; font-weight:bold; font-size:12.5pt; line-height:1.6; text-align:right; width: 100%;"></div>
+                <div id="portal-goal-reached-badge" style="display:none; background:#e8f5e9; border:2px solid #2e7d32; color:#1b5e20; padding:15px; border-radius:12px; margin-bottom:15px; font-weight:bold; font-size:12.5pt; line-height:1.6; direction:rtl; text-align:right; width: 100%;">
+                    🎉 هوراااا قهرمان پرتلاش! هدف تکلیف رو کاملاً ترکوندی و همه‌ی ستاره‌های مورد نیاز رو گرفتی! تو فوق‌العاده‌ای! 🥇 حالا می‌تونی با خیال راحت به پرتال برگردی. خداقوت! ❤️
+                </div>
+                <div id="portal-back-instruction" style="display:none; width: 100%;"></div>
+
+                <button id="playAgainBtn" class="btn" style="background:#34495e; width:100%; margin-top:10px;" onclick="restartGame()">🔄 تلاش دوباره</button>
+            </div>
+        </div>
+
+        <div id="portal-submitting-screen" class="screen" style="background:linear-gradient(135deg,#a1c4fd,#c2e9fb); position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1000; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 20px;">
+            <div class="container" style="max-width: 450px;">
+                <h3 id="portal-progress-title" style="color:#2c3e50; margin-bottom:15px; font-weight:bold; font-size:16pt;">⏳ در حال ارسال نتایج به دیتابیس کلاس...</h3>
+                <div style="background:#eee; border-radius:10px; height:20px; width:100%; overflow:hidden; margin-bottom:15px; border:1px solid #ccc;">
+                    <div id="portal-progress-bar" style="background:linear-gradient(90deg, #ff007f, #aa00ff, #00b0ff); width:0%; height:100%; transition:width 0.2s;"></div>
+                </div>
+                <p id="portal-submit-status-text" style="font-size:12pt; color:#555; font-weight:bold; line-height:1.6; direction:rtl;"></p>
+                <button id="portal-retry-submit-btn" style="display:none; margin:15px auto 0; background:#e74c3c; color: white; padding: 10px 20px; border: none; border-radius: 10px; font-weight: bold; cursor: pointer;" onclick="retrySubmission()">🔄 تلاش مجدد برای ارسال</button>
+            </div>
+        </div>
+
+        <div id="screen-assistant" class="screen" style="max-width: 450px; margin: 0 auto;">
+            <h2 style="color: #2c3e50; margin-bottom: 20px; font-size: 1.5rem;">🌟 دستیار ثبت ستاره 🌟</h2>
+            <div style="background: #fff; border: 2px dashed #3498db; border-radius: 12px; padding: 20px; margin-bottom: 25px; line-height: 1.8; text-align: justify; direction: rtl;">
+                <span style="font-size: 14pt; font-weight: bold; color: #2c3e50; display: block; margin-bottom: 10px;" id="ast-welcome">سلام قهرمان!</span>
+                <p style="font-size: 11pt; color: #333; margin: 0;">
+                    بازی قبلی‌ات با موفقیت تمام شده بود، اما به خاطر قطع شدن اینترنت، ستاره‌ی طلایی‌ات به دفتر کلاسی معلم نرسیده بود. 
+                    اصلاً نگران نباش! نیازی به بازی دوباره نیست. دکمه زیر را بزن تا ستاره‌ات ثبت بشه و کارنامه‌ات رو ببینی. 😊
+                </p>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 10px; background: #f8f9fa; border: 1px solid #bdc3c7; border-radius: 10px; padding: 15px; margin-bottom: 25px; text-align: right; direction: rtl; font-size:12pt;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span>👤 نامت:</span>
+                    <span id="ast-name" style="font-weight:bold; color:#2c3e50;">---</span>
+                </div>
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span>⭐ ستاره‌های ثبت‌شده قبلی:</span>
+                    <span id="ast-stars" style="font-weight:bold; color:#f39c12;">۰ ⭐</span>
+                </div>
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span>🎯 ستاره هدف تکلیف:</span>
+                    <span id="ast-req-stars" style="font-weight:bold; color:#27ae60;">۰ ⭐</span>
+                </div>
+            </div>
+            <button style="width: 100%; height: 50px; background: #2ecc71; color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; font-size:13pt;" onclick="submitAssistantStar()">🌟 ثبت ستاره‌ی طلایی من و دریافت کارنامه</button>
+        </div>
+    </div>
+    
+    <div id="number-pad" class="hidden">
+        <button onclick="game.inputDigit(7)">۷</button>
+        <button onclick="game.inputDigit(8)">۸</button>
+        <button onclick="game.inputDigit(9)">۹</button>
+        <button onclick="game.inputDigit(4)">۴</button>
+        <button onclick="game.inputDigit(5)">۵</button>
+        <button onclick="game.inputDigit(6)">۶</button>
+        <button onclick="game.inputDigit(1)">۱</button>
+        <button onclick="game.inputDigit(2)">۲</button>
+        <button onclick="game.inputDigit(3)">۳</button>
+        <button id="pad-clear" onclick="game.clearActiveBox()">پاک</button>
+        <button id="pad-zero" onclick="game.inputDigit(0)">۰</button>
+        <button id="pad-close" onclick="game.hideNumberPad()">بستن</button>
+    </div>
+
+    <div id="modal-confirm" class="hidden">
+        <div class="modal-content">
+            <div class="modal-title">⚠️ حالت آموزشی</div>
+            <p class="modal-text">آیا مطمئنی؟ با ورود به حالت آموزشی، مراحل قبلی پاک می‌شه و بازی برات آموزشی می‌شه.</p>
+            <p class="modal-text" style="font-size:0.9rem; color:#e67e22;">(در این حالت ستاره‌ای نمی‌گیری)</p>
+            <div style="display:flex; justify-content:space-around;">
+                <button class="btn btn-finish" onclick="game.initTutorial()">✅ باشه، یادم بده</button>
+                <button class="btn" style="background:#95a5a6;" onclick="document.getElementById('modal-confirm').classList.add('hidden')">❌ انصراف</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const CONFIG = {
+            school: 'دبستان معاد خرگوشی', teacherPhone: '989392291209', storageKey: 'div_game_final_v350_fixed_tut_v2',
+            pvLabels: ['هـ', 'ص', 'د', 'ی'], pvClasses: ['color-h', 'color-s', 'color-d', 'color-y']
+        };
+
+        let STORAGE = 'studentProfile_Div4x1_Default';
+        let GAME_STATE_STORAGE = 'gameState_Div4x1_Default';
+
+        const toPersian = num => String(num).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[d]);
+        const toEnglish = str => {
+            if(!str) return '';
+            return String(str).trim()
+                .replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d))
+                .replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)) 
+                .replace(/[^\d]/g, '');
+        };
+        const nowStr = () => new Date().toLocaleString('fa-IR', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const getEl = id => document.getElementById(id);
+
+        const ART_NUMS = {
+            '0': [[1,1,1],[1,0,1],[1,0,1],[1,0,1],[1,1,1]],
+            '1': [[0,1,0],[0,1,0],[0,1,0],[0,1,0],[0,1,0]],
+            '2': [[1,1,1],[0,0,1],[1,1,1],[1,0,0],[1,1,1]],
+            '3': [[1,1,1],[0,0,1],[1,1,1],[0,0,1],[1,1,1]],
+            '4': [[1,0,1],[1,0,1],[1,1,1],[0,0,1],[0,0,1]],
+            '5': [[1,1,1],[1,0,0],[1,1,1],[0,0,1],[1,1,1]],
+            '6': [[1,1,1],[1,0,0],[1,1,1],[1,0,1],[1,1,1]],
+            '7': [[1,1,1],[0,0,1],[0,0,1],[0,0,1],[0,0,1]],
+            '8': [[1,1,1],[1,0,1],[1,1,1],[1,0,1],[1,1,1]],
+            '9': [[1,1,1],[1,0,1],[1,1,1],[0,0,1],[1,1,1]]
+        };
+
+        const generateVerticalArt = (starsNum, minuteNum) => {
+            const starsStr = String(starsNum).padStart(2, '0');
+            const minuteStr = String(minuteNum).padStart(2, '0');
+            const E_WHITE = '⬜'; const E_STAR_ON = '⭐'; const E_TIME_ON = '⬛';
+            let art = '';
+            for (let row = 0; row < 13; row++) {
+                let line = '\u202A' + E_WHITE; 
+                if (row === 0 || row === 6 || row === 12) { line += E_WHITE.repeat(7); } else {
+                    let numStr, fillEmoji, fontRow;
+                    if (row >= 1 && row <= 5) { numStr = starsStr; fillEmoji = E_STAR_ON; fontRow = row - 1; } else { numStr = minuteStr; fillEmoji = E_TIME_ON; fontRow = row - 7; }
+                    const d1 = ART_NUMS[numStr[0]][fontRow]; line += d1.map(p => p ? fillEmoji : E_WHITE).join(''); line += E_WHITE;
+                    const d2 = ART_NUMS[numStr[1]][fontRow]; line += d2.map(p => p ? fillEmoji : E_WHITE).join('');
+                }
+                line += E_WHITE + '\u202C'; art += line + '\n';
+            }
+            return art;
+        };
+
+        let state = {
+            name: "", stars: 0, totalPlays: 0,
+            lastHelp: false, isTutorial: false, reportShown: false,
+            currentScreen: 'register'
+        };
+
+        const app = {
+            init() {
+                loadProfile();
+            },
+            save() { 
+                saveProfile(); 
+            },
+            registerUser() {
+                try {
+                    state.isTutorial = false;
+                    state.reportShown = false;
+                    state.currentScreen = 'game';
+                    const activeState = checkSavedUnfinishedState();
+                    if (activeState) {
+                        loadState();
+                        game.loadState();
+                    } else {
+                        game.start();
+                    }
+                    showScreen('screen-game');
+                    this.updateStats();
+                    saveProfile();
+                } catch (e) {
+                    clearGameState();
+                    state.currentScreen = 'game';
+                    saveProfile();
+                    game.start();
+                    showScreen('screen-game');
+                    this.updateStats();
+                    saveProfile();
+                }
+            },
+            showScreen(id) {
+                showScreen(id);
+                getEl('stats-bar').classList.toggle('hidden', id === 'screen-register' || id === 'portal-submitting-screen');
+                if (id === 'screen-report') this.renderReport();
+                if (id !== 'screen-game') game.hideNumberPad();
+            },
+            updateStats() {
+                if(state.name) { 
+                    getEl('disp-name').innerText = state.name; 
+                    getEl('disp-games').innerText = toPersian(state.totalPlays); 
+                    getEl('disp-stars').innerText = toPersian(state.stars); 
+                }
+            },
+            async finishGame(success) {
+                const earnedThisGame = (game.helpUsed || state.isTutorial) ? 0 : 1;
+                state.totalPlays = state.totalPlays + 1;
+                if (success && earnedThisGame === 1) {
+                    state.stars = state.stars + 1;
+                }
+                state.lastHelp = (game.helpUsed || state.isTutorial);
+                state.reportShown = true;
+                state.currentScreen = 'report';
+
+                clearGameState();
+                saveProfile();
+
+                showScreen('portal-submitting-screen');
+                await Portal.submitProgress(earnedThisGame, {
+                    onSuccess: (data) => {
+                        state.totalPlays = data.plays;
+                        state.stars = data.stars;
+                        saveProfile();
+                        this.updateStats();
+                        showScreen('screen-report');
+                        this.renderReport(data.goalReached, data.stars);
+                    },
+                    onFailure: (err) => {
+                    }
+                });
+            },
+            renderReport(goalReached, currentStars) {
+                const stars = Portal.isPortalMode ? currentStars : state.stars;
+                const games = state.totalPlays;
+                const now = new Date();
+                const dateTimeStr = toPersian(now.toLocaleDateString('fa-IR', { year: 'numeric', month: '2-digit', day: '2-digit' })) + ' ' + toPersian(now.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+
+                getEl('rep-name').innerText = state.name; 
+                getEl('rep-time').innerText = dateTimeStr; 
+                getEl('rep-games').innerText = toPersian(games); 
+                getEl('rep-stars').innerText = toPersian(stars);
+
+                const repReqStarsRow = getEl('portal-req-stars-row');
+                if (repReqStarsRow) {
+                    repReqStarsRow.style.display = 'block';
+                    getEl('repReqStars').innerText = toPersian(Portal.requiredStars) + ' ⭐';
+                }
+
+                const goalBadge = getEl('portal-goal-reached-badge');
+                const submitBadge = getEl('portal-submit-badge');
+                const backInstruction = getEl('portal-back-instruction');
+                const playAgainBtn = getEl('playAgainBtn');
+
+                goalBadge.style.display = 'none';
+                submitBadge.style.display = 'none';
+                backInstruction.style.display = 'none';
+                playAgainBtn.style.display = 'block';
+
+                if (state.isTutorial || state.lastHelp) {
+                    getEl('rep-help').innerText = 'با کمک یا آموزشی';
+                    playAgainBtn.innerText = "بازی دوباره بدون کمک 💡";
+                    backInstruction.innerHTML = `
+                        <div style="background:#fff3e0; border:1px solid #ffe082; color:#e65100; padding:12px; border-radius:12px; margin-top:10px; font-size:11.5pt; line-height:1.6; text-align:center;">
+                            💡 این دور بازی‌ات آموزشی بود و برای گرفتن ستاره باید بدون کمک حلش کنی. دکمه پایین رو بزن تا بدون کمک تلاش کنی!
+                        </div>
+                    `;
+                    backInstruction.style.display = 'block';
+                } else if (goalReached) {
+                    getEl('rep-help').innerText = 'مستقل';
+                    goalBadge.style.display = 'block';
+                    playAgainBtn.style.display = 'none';
+                    backInstruction.innerHTML = `
+                        <div style="background:#e8f5e9; border:1px solid #2e7d32; color:#1b5e20; padding:15px; border-radius:12px; margin-top:10px; font-weight:bold; font-size:12pt; line-height:1.6; text-align:center;">
+                            📱 آفرین! تکلیف با موفقیت تکمیل شد.<br>
+                            حالا با زدن <b>دکمه بازگشت (Back) گوشی</b> به پرتال کلاس برگرد.
+                        </div>
+                    `;
+                    backInstruction.style.display = 'block';
+                } else {
+                    getEl('rep-help').innerText = 'مستقل';
+                    const remaining = Portal.requiredStars - stars;
+                    submitBadge.innerHTML = `✨ آفرین دانش‌آموز زرنگم! تو <b>${toPersian(stars)}</b> ستاره از <b>${toPersian(Portal.requiredStars)}</b> ستاره‌ی این تکلیف رو گرفتی! ⭐ فقط به <b>${toPersian(remaining)}</b> ستاره‌ی دیگه نیاز داری تا تیک تکلیف بخوره. بدو برو بعدی رو حل کن! 🏆`;
+                    submitBadge.style.display = 'block';
+                    playAgainBtn.innerText = "گرفتن ستاره بیشتر 🎮";
+                    backInstruction.innerHTML = `
+                        <div style="background:#fff3e0; border:1px solid #ffe082; color:#e65100; padding:12px; border-radius:12px; margin-top:10px; font-size:11.5pt; line-height:1.6; text-align:center;">
+                            💡 اگر می‌خواهی بعداً بازی کنی، با زدن <b>دکمه بازگشت (Back) گوشی</b> به پرتال برگرد.
+                        </div>
+                    `;
+                    backInstruction.style.display = 'block';
+                }
+            },
+            restartGame() { 
+                restartGame();
+            }
+        };
+
+        const game = {
+            dividend: 0, divisor: 0, digits: [], stage: 0, subStep: 'SELECT', activeBox: null, helpUsed: false, mathSteps: [], currentRem: 0, lastRemRowIndex: -1,
+            
+            start() {
+                this.divisor = Math.floor(Math.random() * 8) + 2; this.dividend = Math.floor(Math.random() * 8000) + 1000;
+                this.digits = String(this.dividend).split('').map(Number); this.stage = 0; this.subStep = 'SELECT'; this.currentRem = 0; this.helpUsed = false;
+                this.mathSteps = Array(4).fill(null).map(() => ({ q: null, p: Array(4).fill(''), r: Array(4).fill('') })); this.lastRemRowIndex = -1;
+                const btn = getEl('btn-check'); btn.innerText = '✅ بررسی'; btn.classList.remove('btn-finish'); btn.classList.add('btn-success'); btn.disabled = true;
+                this.saveState(); this.renderUI(); 
+                this.resetToNormalUI();
+                this.msg('اولین رقم سمت چپ رو انتخاب کن.');
+            },
+            
+            saveState() { 
+                saveGameState();
+            },
+            
+            loadState() {
+                loadState();
+                const btn = getEl('btn-check');
+                if (this.subStep === 'FINISH') { btn.innerText = '🏁 پایان'; btn.classList.add('btn-finish'); btn.classList.remove('btn-success'); btn.disabled = false; }
+                else { btn.innerText = '✅ بررسی'; btn.classList.remove('btn-finish'); btn.classList.add('btn-success'); }
+                this.renderUI();
+                if (state.isTutorial) {
+                    this.setTutorialUI();
+                } else {
+                    this.resetToNormalUI();
+                    this.updateCheckBtn();
+                    if(this.subStep === 'SELECT') { if(this.stage === 0) this.msg('اولین رقم سمت چپ رو انتخاب کن.'); else this.msg(`${CONFIG.pvLabels[this.stage]} رو انتخاب کن.`); } 
+                    else if (this.subStep === 'SUBTRACT') { this.msg('تفریقش کن (از راست).'); }
+                }
+                if (this.subStep !== 'SELECT' && this.stage < 4) this.showBracket(this.stage);
+                this.updateSelectHighlight(); 
+            },
+            clearState() { clearGameState(); },
+
+            setTutorialUI() {
+                getEl('tutorial-controls').classList.remove('hidden'); 
+                getEl('game-controls').classList.add('hidden'); 
+                getEl('help-button').classList.add('hidden');
+                getEl('btn-check').disabled = true;
+                this.hideNumberPad();
+            },
+            resetToNormalUI() {
+                getEl('tutorial-controls').classList.add('hidden'); 
+                getEl('game-controls').classList.remove('hidden'); 
+                getEl('help-button').classList.remove('hidden');
+            },
+
+            renderUI() {
+                getEl('math-area').innerHTML = ''; getEl('dividend-row').innerHTML = ''; getEl('quotient-row').innerHTML = ''; getEl('divisor-display').innerText = toPersian(this.divisor);
+                for(let i=0; i<4; i++) { const b = document.createElement('div'); b.className = 'box readonly'; b.innerText = toPersian(this.digits[i]); b.id = `div-${i}`; b.onclick = () => this.clkDividend(i); getEl('dividend-row').appendChild(b); }
+                for (let i = 0; i < 4; i++) { const b = document.createElement('div'); b.className = `box ${CONFIG.pvClasses[i]}`; b.id = `q-${i}`; b.innerHTML = `<span class="pv-label">${CONFIG.pvLabels[i]}</span><span class="val"></span>`; b.onclick = () => this.activate(b.id); getEl('quotient-row').appendChild(b); }
+                this.mathSteps.forEach((step, idx) => {
+                    if (step.q !== null) { const qBox = getEl(`q-${idx}`); if (qBox) { qBox.querySelector('.val').innerText = toPersian(step.q); qBox.classList.add('has-val', 'readonly', 'correct'); } }
+                    if (step.p.some(v => v !== '') || (idx === this.stage && this.subStep !== 'SELECT')) {
+                        if (step.q !== 0 && step.q !== null) {
+                            this.createMathRows(idx); step.p.forEach((val, i) => { if (val !== '') setBoxVal(`p-${idx}-${i}`, val, (this.subStep !== 'MULTIPLY_P' || idx < this.stage)); });
+                            step.r.forEach((val, i) => { if (val !== '') setBoxVal(`r-${idx}-${i}`, val, (idx < this.stage)); });
+                            if(idx < this.stage) { const pRow = getEl(`row-p-${idx}`); if(pRow) pRow.classList.add('dimmed'); }
+                        }
+                    }
+                });
+                
+                for (let s = 1; s <= this.stage; s++) {
+                     if (s === this.stage && this.subStep === 'SELECT') continue;
+                     let restoreRowIdx = this.getLastActiveRowIndex(s);
+                     if (restoreRowIdx !== -1) {
+                         const rBox = getEl(`r-${restoreRowIdx}-${s}`);
+                         if (rBox) {
+                             rBox.innerText = toPersian(this.digits[s]);
+                             rBox.classList.remove('invisible-box');
+                             rBox.classList.add('readonly');
+                             rBox.onclick = () => { this.activate(rBox.id); this.handleBorrowClick(rBox.id); };
+                         }
+                     }
+                }
+                this.updateSelectHighlight();
+            },
+
+            getLastActiveRowIndex(currentStage) {
+                for (let i = currentStage - 1; i >= 0; i--) {
+                    if (this.mathSteps[i].q !== 0 && this.mathSteps[i].q !== null) { return i; }
+                }
+                return -1; 
+            },
+            
+            getTopCellForColumn(colIdx) {
+                let lastActive = this.getLastActiveRowIndex(this.stage);
+                if (lastActive === -1) { return getEl(`div-${colIdx}`); } 
+                else { return getEl(`r-${lastActive}-${colIdx}`); }
+            },
+
+            createMathRows(idx) {
+                if (getEl(`row-p-${idx}`)) return; this.lastRemRowIndex = idx; const container = getEl('math-area');
+                const rowP = document.createElement('div'); rowP.className = 'row-container'; rowP.id = `row-p-${idx}`; const op = document.createElement('div'); op.className = 'operator'; op.innerText = '-'; rowP.appendChild(op);
+                
+                const q = this.mathSteps[idx].q; const prod = q * this.divisor; const sProd = String(prod);
+                const pEnd = idx; const pStart = idx - sProd.length + 1;
+
+                for(let i=0; i<4; i++) {
+                    const b = document.createElement('div'); b.className = 'box'; b.id = `p-${idx}-${i}`;
+                    if (i < pStart || i > pEnd) b.classList.add('invisible-box'); else b.onclick = () => this.activate(b.id);
+                    rowP.appendChild(b);
+                }
+                container.appendChild(rowP);
+                const line = document.createElement('div'); line.className = 'subtraction-line'; container.appendChild(line);
+                const rowR = document.createElement('div'); rowR.className = 'row-container'; rowR.id = `row-r-${idx}`;
+                
+                let workingVal = this.digits[0];
+                for (let k = 0; k <= idx; k++) {
+                    const stepQ = (this.mathSteps[k].q !== null) ? this.mathSteps[k].q : 0;
+                    const stepProd = stepQ * this.divisor;
+                    let stepRem = workingVal - stepProd;
+                    
+                    if (k === idx) {
+                        const sRem = String(stepRem);
+                        const rEnd = idx;
+                        const rStart = idx - sRem.length + 1;
+                        for(let i=0; i<4; i++) {
+                            const b = document.createElement('div'); b.className = 'box'; b.id = `r-${idx}-${i}`; 
+                            let isVisible = false;
+                            if (i >= rStart && i <= rEnd) isVisible = true;
+                            if (i === idx + 1) isVisible = false; 
+                            if (!isVisible) b.classList.add('invisible-box');
+                            b.onclick = () => { this.activate(b.id); this.handleRemainderClick(idx, i); };
+                            rowR.appendChild(b);
+                        }
+                    } else {
+                        if (k + 1 < 4) workingVal = (stepRem * 10) + this.digits[k+1];
+                    }
+                }
+                container.appendChild(rowR);
+            },
+            
+            handleRemainderClick(rIdx, cIdx) {
+                if(state.isTutorial) return;
+                if (this.subStep === 'SELECT' && rIdx === this.lastRemRowIndex && cIdx === this.stage) this.clkDividend(this.stage);
+                if (this.subStep === 'SUBTRACT') {
+                    this.handleBorrowClick(`r-${rIdx}-${cIdx}`);
+                }
+            },
+            
+            checkBorrowNecessity(targetId) {
+                const parts = targetId.split('-'); let clickedCol = -1;
+                if (parts[0] === 'div') clickedCol = parseInt(parts[1]); else clickedCol = parseInt(parts[2]);
+                const neighborCol = clickedCol + 1; if (neighborCol > 3) return false;
+                const topEl = this.getTopCellForColumn(neighborCol); const botEl = getEl(`p-${this.stage}-${neighborCol}`); 
+                if (!topEl || !botEl || botEl.classList.contains('invisible-box')) return false;
+                let topVal = parseInt(toEnglish(topEl.innerText));
+                if (topEl.classList.contains('borrow-dest')) { const destAttr = topEl.getAttribute('data-val-dest'); if(destAttr) topVal = parseInt(toEnglish(destAttr)); else topVal += 10; }
+                const botVal = parseInt(toEnglish(botEl.innerText)) || 0; 
+                if (isNaN(topVal) || isNaN(botVal)) return false;
+                if (topVal < botVal) return true; 
+                if (topEl.classList.contains('borrow-dest')) return true; 
+                return false;
+            },
+
+            handleBorrowClick(id) {
+                const el = getEl(id); if(!el) return;
+                const parts = id.split('-'); let clickedCol = -1;
+                if (parts[0] === 'div') clickedCol = parseInt(parts[1]); else clickedCol = parseInt(parts[2]);
+                const neighborCol = clickedCol + 1;
+                const neighbor = this.getTopCellForColumn(neighborCol);
+
+                if (el.classList.contains('borrow-src')) { 
+                    if(state.isTutorial) return; 
+                    el.classList.remove('borrow-src'); el.removeAttribute('data-val-sub'); if (neighbor) { neighbor.classList.remove('borrow-dest'); neighbor.removeAttribute('data-val-dest'); } return; 
+                }
+                
+                const needed = this.checkBorrowNecessity(id);
+                if (!needed && !state.isTutorial) { el.classList.add('shake'); setTimeout(() => el.classList.remove('shake'), 500); this.msg('نیازی به قرض گرفتن نیست.', true); return; }
+                if (!needed && state.isTutorial) return; 
+
+                const originalVal = parseInt(toEnglish(el.innerText)); if (isNaN(originalVal)) return; let newVal = (originalVal === 0) ? 9 : originalVal - 1;
+                el.classList.add('borrow-src'); el.setAttribute('data-val-sub', toPersian(newVal));
+                if (neighbor) { const originalNeighborVal = parseInt(toEnglish(neighbor.innerText)); if (!isNaN(originalNeighborVal)) { neighbor.classList.add('borrow-dest'); neighbor.setAttribute('data-val-dest', toPersian(originalNeighborVal + 10)); } }
+                if(!state.isTutorial) this.msg('قرض گرفتی، حالا تفریق کن.');
+            },
+
+            getLatestTargetRow() { if (this.lastRemRowIndex === -1) return { type: 'top', idx: -1 }; return { type: 'rem', idx: this.lastRemRowIndex }; },
+
+            updateSelectHighlight() {
+                document.querySelectorAll('.action-target').forEach(el => el.classList.remove('action-target'));
+                if (this.subStep === 'SELECT') { const dvEl = getEl(`div-${this.stage}`); if (dvEl) dvEl.classList.add('action-target'); }
+            },
+
+            clkDividend(idx) {
+                if (this.subStep === 'SUBTRACT') return this.handleBorrowClick(`div-${idx}`);
+                if (this.subStep === 'QUOTIENT' && idx === this.stage && this.mathSteps[this.stage] && this.mathSteps[this.stage].q === 0) {
+                    this.currentRem = this.getCurrentTotal(); this.stage++; this.subStep = 'SELECT'; this.saveState(); this.updateSelectHighlight();
+                }
+                if (this.stage === 4) return this.msg('تمام شد.');
+                if (this.subStep !== 'SELECT') return this.msg('مرحله جاری رو کامل کن.', true);
+                if (idx !== this.stage) return this.msg(`نوبت رقم ${CONFIG.pvLabels[this.stage]} است.`, true);
+                
+                if (idx > 0) {
+                     let targetRowIdx = this.getLastActiveRowIndex(idx);
+                     let targetCell = null;
+                     if (targetRowIdx !== -1) { targetCell = getEl(`r-${targetRowIdx}-${idx}`); } 
+                     
+                     if(targetCell) {
+                         targetCell.innerText = toPersian(this.digits[idx]);
+                         targetCell.classList.remove('invisible-box');
+                         targetCell.classList.add('readonly');
+                         targetCell.onclick = () => { this.activate(targetCell.id); this.handleBorrowClick(targetCell.id); };
+                         targetCell.style.transform = 'translateY(-20px)';
+                         setTimeout(() => targetCell.style.transform = 'translateY(0)', 50);
+                     }
+                }
+
+                this.subStep = 'QUOTIENT'; this.updateSelectHighlight(); this.showBracket(idx); this.activate(`q-${idx}`); 
+                if(state.isTutorial) this.msg('تقسیمش کن.'); else this.msg('تقسیم کن و جواب رو بنویس.');
+                this.saveState();
+            },
+
+            activate(id) {
+                if (state.isTutorial) return; 
+                if (getEl(id).classList.contains('readonly')) return; if (getEl(id).classList.contains('invisible-box')) return;
+                const parts = id.split('-'); if (parts[0] === 'q') { const idx = parseInt(parts[1]); if (idx !== this.stage) return; if (this.subStep !== 'QUOTIENT') return; }
+                if (this.activeBox) getEl(this.activeBox).classList.remove('active-input'); this.activeBox = id; getEl(id).classList.add('active-input'); getEl('number-pad').classList.remove('hidden');
+                setTimeout(() => getEl(id).scrollIntoView({behavior: "smooth", block: "center", inline: "nearest"}), 100);
+            },
+
+            hideNumberPad() { getEl('number-pad').classList.add('hidden'); if (this.activeBox) getEl(this.activeBox).classList.remove('active-input'); this.activeBox = null; },
+
+            inputDigit(n) {
+                if (!this.activeBox && !state.isTutorial) return; 
+                let targetId = this.activeBox;
+                if (state.isTutorial) targetId = n.targetId; 
+
+                const el = getEl(targetId); 
+                el.innerText = toPersian(state.isTutorial ? n.val : n); 
+                el.classList.add('has-val'); el.classList.remove('wrong');
+                
+                const [type, stg, idx] = targetId.split('-'); const s = parseInt(stg); const i = parseInt(idx);
+                const val = state.isTutorial ? n.val : n;
+
+                if (type === 'q') {
+                     if(state.isTutorial) {
+                         this.mathSteps[s].q = val; el.classList.add('correct', 'readonly');
+                         if (val === 0) {
+                            this.currentRem = this.getCurrentTotal(); 
+                            if(this.stage === 3) { this.msg('پایان تقسیم.'); this.subStep = 'FINISH'; } 
+                            else { this.stage++; this.subStep = 'SELECT'; this.msg(`چون نمیشه، ۰ گذاشتیم. حالا رقم بعدی رو بیار پایین.`); this.updateSelectHighlight(); }
+                        } else {
+                            this.createMathRows(this.stage); this.subStep = 'MULTIPLY_P'; this.msg('حالا جواب رو در مقسوم‌علیه ضرب می‌کنیم.'); 
+                        }
+                     } else this.checkQuotientInstant(val); 
+                } 
+                else if (type === 'p') { this.mathSteps[s].p[i] = String(val); if(!state.isTutorial) { this.autoAdvance(type, s, i, false); } } 
+                else if (type === 'r') { this.mathSteps[s].r[i] = String(val); if(!state.isTutorial) { this.autoAdvance(type, s, i, true); } }
+                
+                this.updateCheckBtn();
+                this.saveState();
+            },
+            
+            clearActiveBox() {
+                if(!this.activeBox) return; const el = getEl(this.activeBox); el.innerText = ''; el.classList.remove('has-val', 'wrong');
+                const [type, stg, idx] = this.activeBox.split('-'); const s = parseInt(stg); const i = parseInt(idx);
+                if(type === 'q') this.mathSteps[s].q = null; else if(type === 'p') this.mathSteps[s].p[i] = ''; else if(type === 'r') this.mathSteps[s].r[i] = '';
+                this.updateCheckBtn(); this.saveState();
+            },
+
+            getCurrentTotal() {
+                if (this.stage === 0) return this.digits[0];
+                return (this.currentRem * 10) + this.digits[this.stage];
+            },
+
+            checkQuotientInstant(n) {
+                const total = this.getCurrentTotal();
+                let correctQ = Math.floor(total / this.divisor);
+                if (correctQ > 9) correctQ = 9; 
+
+                if (n === correctQ) {
+                    this.mathSteps[this.stage].q = n; getEl(this.activeBox).classList.add('correct', 'readonly'); this.hideNumberPad();
+                    if (n === 0) {
+                        this.currentRem = total; 
+                        if(this.stage === 3) { this.msg('پایان تقسیم. دکمه بررسی رو بزن.'); this.subStep = 'FINISH'; this.updateCheckBtn(); } 
+                        else { this.stage++; this.subStep = 'SELECT'; this.msg(`${CONFIG.pvLabels[this.stage]} رو انتخاب کن.`); this.updateSelectHighlight(); }
+                    } else {
+                        this.createMathRows(this.stage); this.subStep = 'MULTIPLY_P'; this.msg('ضرب رو بنویس (از چپ).'); 
+                        const pRow = getEl(`row-p-${this.stage}`);
+                        const boxes = Array.from(pRow.querySelectorAll('.box:not(.invisible-box)'));
+                        if(boxes.length > 0) this.activate(boxes[0].id);
+                    }
+                    this.saveState();
+                } else { getEl(this.activeBox).classList.add('wrong'); this.msg('اشتباهه.', true); }
+            },
+
+            autoAdvance(type, s, i, isReverse) {
+                const row = getEl(`row-${type}-${s}`);
+                const boxes = Array.from(row.querySelectorAll('.box:not(.invisible-box)'));
+                const currentId = `${type}-${s}-${i}`;
+                const currentIndex = boxes.findIndex(b => b.id === currentId);
+
+                if (currentIndex !== -1) {
+                    if (isReverse) {
+                        if (currentIndex > 0) this.activate(boxes[currentIndex - 1].id);
+                        else this.hideNumberPad();
+                    } else {
+                        if (currentIndex < boxes.length - 1) this.activate(boxes[currentIndex + 1].id);
+                        else this.hideNumberPad();
+                    }
+                }
+            },
+
+            isRowFull() {
+                const rowId = this.subStep === 'MULTIPLY_P' ? `row-p-${this.stage}` : `row-r-${this.stage}`; const row = getEl(rowId); if(!row) return false;
+                const visibleBoxes = Array.from(row.querySelectorAll('.box:not(.invisible-box)')); if(visibleBoxes.length === 0) return true; return visibleBoxes.every(b => b.innerText.trim() !== '');
+            },
+
+            updateCheckBtn() {
+                const btn = getEl('btn-check'); 
+                if (this.subStep === 'FINISH') { btn.innerText = '🏁 پایان'; btn.classList.add('btn-finish'); btn.classList.remove('btn-success'); btn.disabled = false; } 
+                else {
+                    btn.innerText = '✅ بررسی'; btn.classList.remove('btn-finish'); btn.classList.add('btn-success');
+                    const full = this.isRowFull(); if ((this.subStep === 'MULTIPLY_P' || this.subStep === 'SUBTRACT') && full) { btn.disabled = false; this.msg('حالا دکمه بررسی رو بزن.'); } else { btn.disabled = true; }
+                }
+            },
+
+            checkCurrentStep() {
+                if (this.subStep === 'FINISH') return app.finishGame(true);
+                const q = this.mathSteps[this.stage].q; const prod = q * this.divisor; 
+                let upperVal = this.getCurrentTotal(); const rem = upperVal - prod;
+                
+                let correct = true;
+                if (this.subStep === 'MULTIPLY_P') {
+                    const pRow = getEl(`row-p-${this.stage}`);
+                    const visibleBoxes = Array.from(pRow.querySelectorAll('.box:not(.invisible-box)'));
+                    let userNumStr = visibleBoxes.map(b => toEnglish(b.innerText)).join('');
+                    let userNum = parseInt(userNumStr);
+                    
+                    if (userNum === prod) {
+                         visibleBoxes.forEach(b => { b.classList.add('correct', 'readonly'); b.classList.remove('wrong', 'active-input'); });
+                         getEl('btn-check').disabled = true; this.subStep = 'SUBTRACT'; 
+                         if(state.isTutorial) this.msg('حالا باید تفریق کنی.'); else this.msg('آفرین. تفریق کن (از راست).'); 
+                         
+                         let rRow = getEl(`row-r-${this.stage}`);
+                         const rBoxes = Array.from(rRow.querySelectorAll('.box:not(.invisible-box)'));
+                         if(rBoxes.length > 0 && !state.isTutorial) this.activate(rBoxes[rBoxes.length - 1].id);
+                    } else {
+                         visibleBoxes.forEach(b => b.classList.add('wrong')); correct = false; this.msg('ضرب اشتباهه.', true);
+                    }
+                    
+                } else if (this.subStep === 'SUBTRACT') {
+                    const rRow = getEl(`row-r-${this.stage}`);
+                    const visibleBoxes = Array.from(rRow.querySelectorAll('.box:not(.invisible-box)')); 
+                    let userNumStr = visibleBoxes.map(b => toEnglish(b.innerText)).join('');
+                    let userNum = parseInt(userNumStr);
+
+                    if (userNum === rem) {
+                        visibleBoxes.forEach(b => { b.classList.add('correct', 'readonly'); b.classList.remove('wrong', 'active-input'); });
+                        getEl('btn-check').disabled = true;
+                        const pRow = getEl(`row-p-${this.stage}`); if(pRow) pRow.classList.add('dimmed');
+                        this.currentRem = rem; this.stage++; this.subStep = 'SELECT'; getEl('bracket').style.display = 'none'; 
+                        if (this.stage > 3) { this.msg('تمام شد! دکمه پایان رو بزن.'); this.subStep = 'FINISH'; this.updateCheckBtn(); } 
+                        else { 
+                            if(state.isTutorial) this.msg('بریم سراغ رقم بعدی.'); else this.msg(`${CONFIG.pvLabels[this.stage]} رو انتخاب کن.`); 
+                            this.updateSelectHighlight(); 
+                        }
+                    } else { visibleBoxes.forEach(b => b.classList.add('wrong')); correct = false; this.msg('تفریق اشتباهه.', true); }
+                }
+                this.saveState();
+            },
+
+            msg(txt, err = false) { const el = getEl('game-message'); if (el) { el.innerText = txt; el.style.borderColor = err ? '#dc3545' : '#f0ad4e'; el.style.color = err ? '#721c24' : '#8a6d3b'; el.style.background = err ? '#f8d7da' : '#fdf6e3'; } },
+
+            showBracket(idx) {
+                let startEl = null; let endEl = null; const targetInfo = this.getLatestTargetRow();
+                if (targetInfo.type === 'top') { let start = idx; for(let i = idx-1; i>=0; i--) { if (this.mathSteps[i].q === 0) start = i; else break; } startEl = getEl(`div-${start}`); endEl = getEl(`div-${idx}`); } 
+                else {
+                    const rIdx = targetInfo.idx;
+                    const rRow = getEl(`row-r-${rIdx}`);
+                    if(rRow) {
+                        const visibleBoxes = Array.from(rRow.querySelectorAll('.box:not(.invisible-box)'));
+                        if(visibleBoxes.length > 0) {
+                            let startIndex = 0;
+                            while(startIndex < visibleBoxes.length - 1) {
+                                const val = toEnglish(visibleBoxes[startIndex].innerText);
+                                if(val === '0' || val === '۰') { startIndex++; } else { break; }
+                            }
+                            startEl = visibleBoxes[startIndex];
+                            endEl = visibleBoxes[visibleBoxes.length - 1];
+                        }
+                    }
+                }
+                const b = getEl('bracket'); const panel = getEl('left-panel');
+                if (!startEl || !endEl || !b || !panel) return;
+                const pRect = panel.getBoundingClientRect(); const d1Rect = startEl.getBoundingClientRect(); const d2Rect = endEl.getBoundingClientRect();
+                const left = d1Rect.left - pRect.left + panel.scrollLeft; const width = (d2Rect.left - d1Rect.left) + d2Rect.width;
+                b.style.display = 'block'; b.style.left = `${left}px`; b.style.width = `${width}px`; 
+                const topOffset = d1Rect.top - pRect.top + panel.scrollTop; b.style.top = `${topOffset - 5}px`; b.style.borderColor = `var(--${CONFIG.pvClasses[idx].split('-')[1]})`;
+                let lbl = b.querySelector('.bracket-label'); if(!lbl) { lbl = document.createElement('span'); lbl.className = 'bracket-label'; b.appendChild(lbl); } lbl.innerText = CONFIG.pvLabels[idx];
+            },
+            
+            requestHelp() {
+                const modal = getEl('modal-confirm');
+                if (modal) modal.classList.remove('hidden');
+            },
+
+            initTutorial(skipReset = false) {
+                const modal = getEl('modal-confirm');
+                if (modal) modal.classList.add('hidden');
+                state.isTutorial = true;
+                if(!skipReset) {
+                    this.stage = 0; this.subStep = 'SELECT'; this.currentRem = 0; this.helpUsed = true;
+                    this.mathSteps = Array(4).fill(null).map(() => ({ q: null, p: Array(4).fill(''), r: Array(4).fill('') })); this.lastRemRowIndex = -1;
+                    this.clearState();
+                }
+                saveProfile();
+                this.saveState(); 
+                this.renderUI();
+                this.setTutorialUI();
+                
+                if (this.subStep === 'SELECT') {
+                    if (this.stage === 0) this.msg('روی رقم اول سمت چپ می‌زنیم.');
+                    else this.msg(`${CONFIG.pvLabels[this.stage]} رو میاریم پایین.`);
+                }
+            },
+
+            stepTutorial() {
+                if (this.subStep === 'SELECT') {
+                    this.clkDividend(this.stage);
+                    return;
+                }
+
+                if (this.subStep === 'QUOTIENT') {
+                    const total = this.getCurrentTotal();
+                    let correctQ = Math.floor(total / this.divisor);
+                    if (correctQ > 9) correctQ = 9;
+                    this.msg(`${toPersian(total)} تقسیم بر ${toPersian(this.divisor)} می‌شه ${toPersian(correctQ)}`);
+                    this.inputDigit({targetId: `q-${this.stage}`, val: correctQ});
+                    return;
+                }
+
+                if (this.subStep === 'MULTIPLY_P') {
+                    const pRow = getEl(`row-p-${this.stage}`);
+                    const boxes = Array.from(pRow.querySelectorAll('.box:not(.invisible-box)'));
+                    const q = this.mathSteps[this.stage].q;
+                    const prod = q * this.divisor;
+                    const sProd = String(prod);
+                    
+                    let filledCount = boxes.filter(b => b.classList.contains('has-val')).length;
+                    
+                    if (filledCount === boxes.length) {
+                        this.checkCurrentStep();
+                    } else {
+                        let boxToFill = boxes[filledCount]; 
+                        const targetDigit = sProd[filledCount]; 
+                        this.inputDigit({targetId: boxToFill.id, val: parseInt(targetDigit)});
+                        this.msg(`${toPersian(q)} ضربدر ${toPersian(this.divisor)} می‌شه ${toPersian(prod)}`);
+                    }
+                    return;
+                }
+
+                if (this.subStep === 'SUBTRACT') {
+                    const rRow = getEl(`row-r-${this.stage}`);
+                    const boxes = Array.from(rRow.querySelectorAll('.box:not(.invisible-box)')); 
+                    
+                    const q = this.mathSteps[this.stage].q; 
+                    const prod = q * this.divisor;
+                    let upperVal = this.getCurrentTotal(); 
+                    const rem = upperVal - prod;
+                    const sRem = String(rem);
+                    
+                    let emptyBoxes = boxes.filter(b => !b.classList.contains('has-val'));
+                    if (emptyBoxes.length === 0) {
+                        this.checkCurrentStep();
+                        return;
+                    }
+                    
+                    let currentBox = emptyBoxes[emptyBoxes.length - 1]; 
+                    const parts = currentBox.id.split('-');
+                    const colIdx = parseInt(parts[2]);
+                    
+                    const topEl = this.getTopCellForColumn(colIdx);
+                    const botEl = getEl(`p-${this.stage}-${colIdx}`);
+                    
+                    if(topEl && botEl) {
+                        let topVal = parseInt(toEnglish(topEl.innerText));
+                        if (topEl.classList.contains('borrow-dest')) { 
+                             const destAttr = topEl.getAttribute('data-val-dest'); 
+                             if(destAttr) topVal = parseInt(toEnglish(destAttr)); else topVal += 10; 
+                        }
+                        if(topEl.classList.contains('borrow-src')) {
+                            const srcAttr = topEl.getAttribute('data-val-sub');
+                            if(srcAttr) topVal = parseInt(toEnglish(srcAttr));
+                        }
+                        
+                        const botVal = parseInt(toEnglish(botEl.innerText)) || 0;
+                        
+                        if (topVal < botVal) {
+                            const srcCol = colIdx - 1;
+                            const srcEl = this.getTopCellForColumn(srcCol);
+                            if (srcEl && !srcEl.classList.contains('borrow-src')) {
+                                this.handleBorrowClick(srcEl.id);
+                                this.msg('چون کوچیکتره، از رقم بغلی قرض می‌گیریم.');
+                                return; 
+                            }
+                        }
+                    }
+
+                    const sIndex = boxes.indexOf(currentBox);
+                    const val = sRem[sIndex];
+                    
+                    this.inputDigit({targetId: currentBox.id, val: parseInt(val)});
+                    this.msg('تفریق می‌کنیم...');
+                    return;
+                }
+                
+                if (this.subStep === 'FINISH') {
+                    app.finishGame(true);
+                }
+            }
+        };
+
+        function setBoxVal(id, val, lock) { const el = getEl(id); if(!el) return; el.innerText = toPersian(val); el.classList.add('has-val'); if(lock) el.classList.add('correct', 'readonly'); }
+        function closeModal() {
+            const modal = getEl('modal-confirm');
+            if (modal) modal.classList.add('hidden');
+        }
+
+        function checkSavedUnfinishedState() {
+            try {
+                const saved = localStorage.getItem(GAME_STATE_STORAGE);
+                if (saved) {
+                    const d = JSON.parse(saved);
+                    if (d && d.div && d.stg < 4) return d;
+                }
+            } catch (e) {}
+            return null;
+        }
+
+        function saveGameState() {
+            localStorage.setItem(GAME_STATE_STORAGE, JSON.stringify({
+                div: game.dividend,
+                dvr: game.divisor,
+                digs: game.digits,
+                stg: game.stage,
+                sub: game.subStep,
+                hlp: game.helpUsed,
+                rem: game.currentRem,
+                mStp: game.mathSteps,
+                lrr: game.lastRemRowIndex
+            }));
+        }
+
+        function loadState() {
+            const saved = localStorage.getItem(GAME_STATE_STORAGE);
+            if (saved) {
+                try {
+                    const d = JSON.parse(saved);
+                    Object.assign(game, {
+                        dividend: d.div,
+                        divisor: d.dvr,
+                        digits: d.digs,
+                        stage: d.stg,
+                        subStep: d.sub,
+                        helpUsed: d.hlp,
+                        currentRem: d.rem,
+                        mathSteps: d.mStp,
+                        lastRemRowIndex: d.lrr
+                    });
+                } catch(e){}
+            }
+        }
+
+        function clearGameState() {
+            localStorage.removeItem(GAME_STATE_STORAGE);
+        }
+
+        function showScreen(id) {
+            const screens = ['screen-register', 'screen-game', 'screen-report', 'screen-assistant', 'portal-submitting-screen'];
+            screens.forEach(s => {
+                const el = getEl(s);
+                if (el) {
+                    el.classList.remove('active');
+                    el.style.display = '';
+                }
+            });
+            const target = getEl(id);
+            if (target) {
+                target.classList.add('active');
+                target.style.display = '';
+            }
+        }
+
+        window.submitAssistantStar = async function() {
+            showScreen('portal-submitting-screen');
+            await Portal.submitProgress(null, {
+                onSuccess: (data) => { authenticatePortalStudent(); },
+                onFailure: (err) => {}
+            });
+        };
+
+        window.retryAuthentication = function() {
+            authenticatePortalStudent();
+        };
+
+        async function authenticatePortalStudent() {
+            await Portal.authenticate({
+                onSuccess: (data) => {
+                    try {
+                        getEl('portal-welcome-section').style.display = '';
+                        getEl('startGame').style.display = '';
+                        getEl('portal-error-section').style.display = 'none';
+
+                        STORAGE = `studentProfile_Div4x1_${Portal.studentId}_${Portal.homeworkId}`;
+                        GAME_STATE_STORAGE = `gameState_Div4x1_${Portal.studentId}_${Portal.homeworkId}`;
+                        
+                        const saved = localStorage.getItem(STORAGE);
+                        let parsedState = null;
+                        if (saved) {
+                            try {
+                                parsedState = JSON.parse(saved);
+                            } catch (e) {}
+                        }
+
+                        if (parsedState && typeof parsedState === 'object') {
+                            state = parsedState;
+                            if (typeof state.isTutorial === 'undefined') state.isTutorial = false;
+                            if (typeof state.currentScreen === 'undefined') state.currentScreen = 'register';
+                        } else {
+                            state = {
+                                name: data.name,
+                                stars: data.stars,
+                                totalPlays: data.plays,
+                                lastHelp: false,
+                                isTutorial: false,
+                                reportShown: false,
+                                currentScreen: 'register'
+                            };
+                        }
+                        
+                        state.name = data.name || Portal.studentName || state.name || "دانش‌آموز";
+                        state.totalPlays = data.plays !== undefined ? data.plays : state.totalPlays;
+                        state.stars = data.stars !== undefined ? data.stars : state.stars;
+                        
+                        saveProfile();
+                        app.updateStats();
+
+                        getEl('portal-student-name').textContent = state.name;
+                        getEl('portal-prev-plays').textContent = toPersian(state.totalPlays);
+                        getEl('portal-prev-stars').textContent = toPersian(state.stars) + ' ⭐';
+                        getEl('portal-req-stars').textContent = toPersian(Portal.requiredStars) + ' ⭐';
+
+                        const activeState = checkSavedUnfinishedState();
+                        const startBtn = getEl('startGame');
+                        if (activeState) {
+                            startBtn.textContent = 'ادامه بازی (باقیمانده) 🔄';
+                            startBtn.style.backgroundColor = '#ff9800';
+                        } else {
+                            startBtn.textContent = 'شروع بازی تکلیف 🎮';
+                            startBtn.style.backgroundColor = '#2ecc71';
+                        }
+
+                        const needsSubmitKey = `portal_needs_submit_${Portal.gameId}_${Portal.studentId}_${Portal.homeworkId}`;
+                        const hasUnsentStar = localStorage.getItem(needsSubmitKey) === 'true';
+
+                        if (hasUnsentStar) {
+                            getEl('ast-welcome').textContent = `سلام ${state.name} عزیز! 🌟`;
+                            getEl('ast-name').textContent = state.name;
+                            getEl('ast-stars').textContent = toPersian(state.stars) + ' ⭐';
+                            getEl('ast-req-stars').textContent = toPersian(Portal.requiredStars) + ' ⭐';
+                            showScreen('screen-assistant');
+                        } else if (state.currentScreen === 'report') {
+                            showScreen('screen-report');
+                            app.renderReport(state.stars >= Portal.requiredStars, state.stars);
+                        } else if (activeState) {
+                            try {
+                                showScreen('screen-game');
+                                loadState();
+                                game.loadState();
+                            } catch (ex) {
+                                clearGameState();
+                                state.currentScreen = 'register';
+                                saveProfile();
+                                showScreen('screen-register');
+                            }
+                        } else {
+                            showScreen('screen-register');
+                        }
+                    } catch (errGlobal) {
+                        showScreen('screen-register');
+                        getEl('portal-welcome-section').style.display = 'none';
+                        getEl('startGame').style.display = 'none';
+                        getEl('portal-error-section').style.display = 'block';
+                    }
+                },
+                onFailure: (err) => {
+                    showScreen('screen-register');
+                    getEl('portal-welcome-section').style.display = 'none';
+                    getEl('startGame').style.display = 'none';
+                    getEl('portal-error-section').style.display = 'block';
+                    const regScreen = getEl('screen-register');
+                    if (regScreen) regScreen.classList.remove('hidden');
+                },
+                onGuestMode: () => {
+                    showScreen('screen-register');
+                    getEl('portal-welcome-section').style.display = 'none';
+                    getEl('startGame').style.display = 'none';
+                    getEl('portal-error-title').textContent = 'لینک ورود نامعتبر است';
+                    getEl('portal-error-desc').textContent = 'جهت انجام این تکلیف، حتماً باید از طریق پنل مدرسه و با لینک اختصاصی خودت وارد بشی.';
+                    getEl('portal-retry-auth-btn').style.display = 'none';
+                    getEl('portal-error-section').style.display = 'block';
+                    const regScreen = getEl('screen-register');
+                    if (regScreen) regScreen.classList.remove('hidden');
+                }
+            });
+        }
+
+        getEl('startGame').onclick = () => {
+            try {
+                state.isTutorial = false;
+                state.currentScreen = 'game';
+                const activeState = checkSavedUnfinishedState();
+                if (activeState) {
+                    loadState();
+                    game.loadState();
+                } else {
+                    game.start();
+                }
+                showScreen('screen-game');
+                app.updateStats();
+                saveProfile();
+            } catch (e) {
+                clearGameState();
+                state.isTutorial = false;
+                state.currentScreen = 'game';
+                saveProfile();
+                game.start();
+                showScreen('screen-game');
+                app.updateStats();
+                saveProfile();
+            }
+        };
+
+        document.addEventListener('DOMContentLoaded', () => {
+            window.addEventListener('beforeunload', saveProfile);
+            authenticatePortalStudent();
+
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('sw.js');
+                let refreshing = false;
+                navigator.serviceWorker.addEventListener('controllerchange', () => {
+                    if (!refreshing) {
+                        window.location.reload();
+                        refreshing = true;
+                    }
+                });
+            }
+        });
+    </script>
+</body>
+</html>
