@@ -382,6 +382,133 @@
             currentScreen: 'register'
         };
 
+        function loadProfile() {
+            const stored = localStorage.getItem(STORAGE);
+            if (stored) {
+                try { 
+                    const parsed = JSON.parse(stored); 
+                    if (parsed && typeof parsed === 'object') {
+                        state = parsed;
+                        if (typeof state.isTutorial === 'undefined') state.isTutorial = false;
+                        if (typeof state.currentScreen === 'undefined') state.currentScreen = 'register';
+                    }
+                } catch(e){}
+            }
+        }
+
+        function saveProfile() { 
+            localStorage.setItem(STORAGE, JSON.stringify(state)); 
+        }
+
+        function saveGameState() {
+            localStorage.setItem(GAME_STATE_STORAGE, JSON.stringify({
+                div: game.dividend,
+                dvr: game.divisor,
+                digs: game.digits,
+                stg: game.stage,
+                sub: game.subStep,
+                hlp: game.helpUsed,
+                rem: game.currentRem,
+                mStp: game.mathSteps,
+                lrr: game.lastRemRowIndex
+            }));
+        }
+
+        function loadState() {
+            const saved = localStorage.getItem(GAME_STATE_STORAGE);
+            if (saved) {
+                try {
+                    const d = JSON.parse(saved);
+                    Object.assign(game, {
+                        dividend: d.div,
+                        divisor: d.dvr,
+                        digits: d.digs,
+                        stage: d.stg,
+                        subStep: d.sub,
+                        helpUsed: d.hlp,
+                        currentRem: d.rem,
+                        mathSteps: d.mStp,
+                        lastRemRowIndex: d.lrr
+                    });
+                } catch(e){}
+            }
+        }
+
+        function clearGameState() {
+            localStorage.removeItem(GAME_STATE_STORAGE);
+        }
+
+        function checkSavedUnfinishedState() {
+            try {
+                const saved = localStorage.getItem(GAME_STATE_STORAGE);
+                if (saved) {
+                    const d = JSON.parse(saved);
+                    if (d && d.div && d.stg < 4) return d;
+                }
+            } catch (e) {}
+            return null;
+        }
+
+        function showScreen(id) {
+            const screens = ['screen-register', 'screen-game', 'screen-report', 'screen-assistant', 'portal-submitting-screen'];
+            screens.forEach(s => {
+                const el = getEl(s);
+                if (el) {
+                    el.classList.remove('active');
+                    el.style.display = '';
+                }
+            });
+            const target = getEl(id);
+            if (target) {
+                target.classList.add('active');
+                target.style.display = '';
+            }
+        }
+
+        function updateStats() {
+            if(state.name) { 
+                getEl('disp-name').innerText = state.name; 
+                getEl('disp-games').innerText = toPersian(state.totalPlays); 
+                getEl('disp-stars').innerText = toPersian(state.stars); 
+            }
+        }
+
+        function restartGame() {
+            state.currentScreen = 'game';
+            saveProfile();
+            showScreen('screen-game');
+            updateStats();
+            game.start();
+        }
+
+        async function finishGame(success) {
+            const earnedThisGame = (game.helpUsed || state.isTutorial) ? 0 : 1;
+            state.totalPlays = state.totalPlays + 1;
+            if (success && earnedThisGame === 1) {
+                state.stars = state.stars + 1;
+            }
+            state.lastHelp = (game.helpUsed || state.isTutorial);
+            state.reportShown = true;
+            state.currentScreen = 'report';
+
+            clearGameState();
+            saveProfile();
+
+            showScreen('portal-submitting-screen');
+            await Portal.submitProgress(earnedThisGame, {
+                onSuccess: (data) => {
+                    state.totalPlays = data.plays;
+                    state.stars = data.stars;
+                    saveProfile();
+                    updateStats();
+                    showScreen('screen-report');
+                    app.renderReport(data.goalReached, data.stars);
+                },
+                onFailure: (err) => {
+                }
+            });
+        }
+
         const app = {
             init() {
                 loadProfile();
@@ -406,6 +533,7 @@
                     saveProfile();
                 } catch (e) {
                     clearGameState();
+                    state.isTutorial = false;
                     state.currentScreen = 'game';
                     saveProfile();
                     game.start();
@@ -421,38 +549,7 @@
                 if (id !== 'screen-game') game.hideNumberPad();
             },
             updateStats() {
-                if(state.name) { 
-                    getEl('disp-name').innerText = state.name; 
-                    getEl('disp-games').innerText = toPersian(state.totalPlays); 
-                    getEl('disp-stars').innerText = toPersian(state.stars); 
-                }
-            },
-            async finishGame(success) {
-                const earnedThisGame = (game.helpUsed || state.isTutorial) ? 0 : 1;
-                state.totalPlays = state.totalPlays + 1;
-                if (success && earnedThisGame === 1) {
-                    state.stars = state.stars + 1;
-                }
-                state.lastHelp = (game.helpUsed || state.isTutorial);
-                state.reportShown = true;
-                state.currentScreen = 'report';
-
-                clearGameState();
-                saveProfile();
-
-                showScreen('portal-submitting-screen');
-                await Portal.submitProgress(earnedThisGame, {
-                    onSuccess: (data) => {
-                        state.totalPlays = data.plays;
-                        state.stars = data.stars;
-                        saveProfile();
-                        this.updateStats();
-                        showScreen('screen-report');
-                        this.renderReport(data.goalReached, data.stars);
-                    },
-                    onFailure: (err) => {
-                    }
-                });
+                updateStats();
             },
             renderReport(goalReached, currentStars) {
                 const stars = Portal.isPortalMode ? currentStars : state.stars;
@@ -514,9 +611,6 @@
                     `;
                     backInstruction.style.display = 'block';
                 }
-            },
-            restartGame() { 
-                restartGame();
             }
         };
 
@@ -842,7 +936,7 @@
             },
 
             checkCurrentStep() {
-                if (this.subStep === 'FINISH') return app.finishGame(true);
+                if (this.subStep === 'FINISH') return finishGame(true);
                 const q = this.mathSteps[this.stage].q; const prod = q * this.divisor; 
                 let upperVal = this.getCurrentTotal(); const rem = upperVal - prod;
                 
@@ -856,7 +950,7 @@
                     if (userNum === prod) {
                          visibleBoxes.forEach(b => { b.classList.add('correct', 'readonly'); b.classList.remove('wrong', 'active-input'); });
                          getEl('btn-check').disabled = true; this.subStep = 'SUBTRACT'; 
-                         if(state.isTutorial) this.msg('حالا باید تفریق کنی.'); else this.msg('آفرین. تفریق کن (از راست).'); 
+                         if(state.isTutorial) this.msg('حاله باید تفریق کنی.'); else this.msg('آفرین. تفریق کن (از راست).'); 
                          
                          let rRow = getEl(`row-r-${this.stage}`);
                          const rBoxes = Array.from(rRow.querySelectorAll('.box:not(.invisible-box)'));
@@ -942,97 +1036,101 @@
             },
 
             stepTutorial() {
-                if (this.subStep === 'SELECT') {
-                    this.clkDividend(this.stage);
-                    return;
-                }
-
-                if (this.subStep === 'QUOTIENT') {
-                    const total = this.getCurrentTotal();
-                    let correctQ = Math.floor(total / this.divisor);
-                    if (correctQ > 9) correctQ = 9;
-                    this.msg(`${toPersian(total)} تقسیم بر ${toPersian(this.divisor)} می‌شه ${toPersian(correctQ)}`);
-                    this.inputDigit({targetId: `q-${this.stage}`, val: correctQ});
-                    return;
-                }
-
-                if (this.subStep === 'MULTIPLY_P') {
-                    const pRow = getEl(`row-p-${this.stage}`);
-                    const boxes = Array.from(pRow.querySelectorAll('.box:not(.invisible-box)'));
-                    const q = this.mathSteps[this.stage].q;
-                    const prod = q * this.divisor;
-                    const sProd = String(prod);
-                    
-                    let filledCount = boxes.filter(b => b.classList.contains('has-val')).length;
-                    
-                    if (filledCount === boxes.length) {
-                        this.checkCurrentStep();
-                    } else {
-                        let boxToFill = boxes[filledCount]; 
-                        const targetDigit = sProd[filledCount]; 
-                        this.inputDigit({targetId: boxToFill.id, val: parseInt(targetDigit)});
-                        this.msg(`${toPersian(q)} ضربدر ${toPersian(this.divisor)} می‌شه ${toPersian(prod)}`);
+                try {
+                    if (this.subStep === 'SELECT') {
+                        this.clkDividend(this.stage);
+                        return;
                     }
-                    return;
-                }
 
-                if (this.subStep === 'SUBTRACT') {
-                    const rRow = getEl(`row-r-${this.stage}`);
-                    const boxes = Array.from(rRow.querySelectorAll('.box:not(.invisible-box)')); 
-                    
-                    const q = this.mathSteps[this.stage].q; 
-                    const prod = q * this.divisor;
-                    let upperVal = this.getCurrentTotal(); 
-                    const rem = upperVal - prod;
-                    const sRem = String(rem);
-                    
-                    let emptyBoxes = boxes.filter(b => !b.classList.contains('has-val'));
-                    if (emptyBoxes.length === 0) {
-                        this.checkCurrentStep();
+                    if (this.subStep === 'QUOTIENT') {
+                        const total = this.getCurrentTotal();
+                        let correctQ = Math.floor(total / this.divisor);
+                        if (correctQ > 9) correctQ = 9;
+                        this.msg(`${toPersian(total)} تقسیم بر ${toPersian(this.divisor)} می‌شه ${toPersian(correctQ)}`);
+                        this.inputDigit({targetId: `q-${this.stage}`, val: correctQ});
+                        return;
+                    }
+
+                    if (this.subStep === 'MULTIPLY_P') {
+                        const pRow = getEl(`row-p-${this.stage}`);
+                        const boxes = Array.from(pRow.querySelectorAll('.box:not(.invisible-box)'));
+                        const q = this.mathSteps[this.stage].q;
+                        const prod = q * this.divisor;
+                        const sProd = String(prod);
+                        
+                        let filledCount = boxes.filter(b => b && b.classList.contains('has-val')).length;
+                        
+                        if (filledCount === boxes.length) {
+                            this.checkCurrentStep();
+                        } else {
+                            let boxToFill = boxes[filledCount]; 
+                            const targetDigit = sProd[filledCount]; 
+                            this.inputDigit({targetId: boxToFill.id, val: parseInt(targetDigit)});
+                            this.msg(`${toPersian(q)} ضربدر ${toPersian(this.divisor)} می‌شه ${toPersian(prod)}`);
+                        }
+                        return;
+                    }
+
+                    if (this.subStep === 'SUBTRACT') {
+                        const rRow = getEl(`row-r-${this.stage}`);
+                        const boxes = Array.from(rRow.querySelectorAll('.box:not(.invisible-box)')); 
+                        
+                        const q = this.mathSteps[this.stage].q; 
+                        const prod = q * this.divisor;
+                        let upperVal = this.getCurrentTotal(); 
+                        const rem = upperVal - prod;
+                        const sRem = String(rem);
+                        
+                        let emptyBoxes = boxes.filter(b => b && !b.classList.contains('has-val'));
+                        if (emptyBoxes.length === 0) {
+                            this.checkCurrentStep();
+                            return;
+                        }
+                        
+                        let currentBox = emptyBoxes[emptyBoxes.length - 1]; 
+                        const parts = currentBox.id.split('-');
+                        const colIdx = parseInt(parts[2]);
+                        
+                        const topEl = this.getTopCellForColumn(colIdx);
+                        const botEl = getEl(`p-${this.stage}-${colIdx}`);
+                        
+                        if(topEl && botEl) {
+                            let topVal = parseInt(toEnglish(topEl.innerText));
+                            if (topEl.classList.contains('borrow-dest')) { 
+                                 const destAttr = topEl.getAttribute('data-val-dest'); 
+                                 if(destAttr) topVal = parseInt(toEnglish(destAttr)); else topVal += 10; 
+                            }
+                            if(topEl.classList.contains('borrow-src')) {
+                                const srcAttr = topEl.getAttribute('data-val-sub');
+                                if(srcAttr) topVal = parseInt(toEnglish(srcAttr));
+                            }
+                            
+                            const botVal = parseInt(toEnglish(botEl.innerText)) || 0;
+                            
+                            if (topVal < botVal) {
+                                const srcCol = colIdx - 1;
+                                const srcEl = this.getTopCellForColumn(srcCol);
+                                if (srcEl && !srcEl.classList.contains('borrow-src')) {
+                                    this.handleBorrowClick(srcEl.id);
+                                    this.msg('چون کوچیکتره، از رقم بغلی قرض می‌گیریم.');
+                                    return; 
+                                }
+                            }
+                        }
+
+                        const sIndex = boxes.indexOf(currentBox);
+                        const val = sRem[sIndex];
+                        
+                        this.inputDigit({targetId: currentBox.id, val: parseInt(val)});
+                        this.msg('تفریق می‌کنیم...');
                         return;
                     }
                     
-                    let currentBox = emptyBoxes[emptyBoxes.length - 1]; 
-                    const parts = currentBox.id.split('-');
-                    const colIdx = parseInt(parts[2]);
-                    
-                    const topEl = this.getTopCellForColumn(colIdx);
-                    const botEl = getEl(`p-${this.stage}-${colIdx}`);
-                    
-                    if(topEl && botEl) {
-                        let topVal = parseInt(toEnglish(topEl.innerText));
-                        if (topEl.classList.contains('borrow-dest')) { 
-                             const destAttr = topEl.getAttribute('data-val-dest'); 
-                             if(destAttr) topVal = parseInt(toEnglish(destAttr)); else topVal += 10; 
-                        }
-                        if(topEl.classList.contains('borrow-src')) {
-                            const srcAttr = topEl.getAttribute('data-val-sub');
-                            if(srcAttr) topVal = parseInt(toEnglish(srcAttr));
-                        }
-                        
-                        const botVal = parseInt(toEnglish(botEl.innerText)) || 0;
-                        
-                        if (topVal < botVal) {
-                            const srcCol = colIdx - 1;
-                            const srcEl = this.getTopCellForColumn(srcCol);
-                            if (srcEl && !srcEl.classList.contains('borrow-src')) {
-                                this.handleBorrowClick(srcEl.id);
-                                this.msg('چون کوچیکتره، از رقم بغلی قرض می‌گیریم.');
-                                return; 
-                            }
-                        }
+                    if (this.subStep === 'FINISH') {
+                        finishGame(true);
                     }
-
-                    const sIndex = boxes.indexOf(currentBox);
-                    const val = sRem[sIndex];
-                    
-                    this.inputDigit({targetId: currentBox.id, val: parseInt(val)});
-                    this.msg('تفریق می‌کنیم...');
-                    return;
-                }
-                
-                if (this.subStep === 'FINISH') {
-                    app.finishGame(true);
+                } catch (e) {
+                    console.error(e);
                 }
             }
         };
@@ -1106,7 +1204,168 @@
                 target.classList.add('active');
                 target.style.display = '';
             }
+            const carryBox = getEl('carryOverBox');
+            if (carryBox) {
+                carryBox.style.display = (id === 'screen-game') ? 'flex' : 'none';
+            }
         }
+
+        function updateStats() {
+            if(state.name) { 
+                getEl('disp-name').innerText = state.name; 
+                getEl('disp-games').innerText = toPersian(state.totalPlays); 
+                getEl('disp-stars').innerText = toPersian(state.stars); 
+            }
+        }
+
+        function restartGame() {
+            state.currentScreen = 'game';
+            saveProfile();
+            showScreen('screen-game');
+            updateStats();
+            game.start();
+        }
+
+        async function finishGame(success) {
+            try {
+                const earnedThisGame = (game.helpUsed || state.isTutorial) ? 0 : 1;
+                state.totalPlays = state.totalPlays + 1;
+                if (success && earnedThisGame === 1) {
+                    state.stars = state.stars + 1;
+                }
+                state.lastHelp = (game.helpUsed || state.isTutorial);
+                state.reportShown = true;
+                state.currentScreen = 'report';
+
+                clearGameState();
+                saveProfile();
+
+                showScreen('portal-submitting-screen');
+                await Portal.submitProgress(earnedThisGame, {
+                    onSuccess: (data) => {
+                        state.totalPlays = data.plays;
+                        state.stars = data.stars;
+                        saveProfile();
+                        updateStats();
+                        showScreen('screen-report');
+                        app.renderReport(data.goalReached, data.stars);
+                    },
+                    onFailure: (err) => {
+                    }
+                });
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        const app = {
+            init() {
+                loadProfile();
+            },
+            save() { 
+                saveProfile(); 
+            },
+            registerUser() {
+                try {
+                    state.isTutorial = false;
+                    state.reportShown = false;
+                    state.currentScreen = 'game';
+                    const activeState = checkSavedUnfinishedState();
+                    if (activeState) {
+                        loadState();
+                        game.loadState();
+                    } else {
+                        game.start();
+                    }
+                    showScreen('screen-game');
+                    this.updateStats();
+                    saveProfile();
+                } catch (e) {
+                    clearGameState();
+                    state.isTutorial = false;
+                    state.currentScreen = 'game';
+                    saveProfile();
+                    game.start();
+                    showScreen('screen-game');
+                    this.updateStats();
+                    saveProfile();
+                }
+            },
+            showScreen(id) {
+                showScreen(id);
+                getEl('stats-bar').classList.toggle('hidden', id === 'screen-register' || id === 'portal-submitting-screen');
+                if (id === 'screen-report') this.renderReport();
+                if (id !== 'screen-game') game.hideNumberPad();
+            },
+            updateStats() {
+                updateStats();
+            },
+            renderReport(goalReached, currentStars) {
+                try {
+                    const stars = Portal.isPortalMode ? currentStars : state.stars;
+                    const games = state.totalPlays;
+                    const now = new Date();
+                    const dateTimeStr = toPersian(now.toLocaleDateString('fa-IR', { year: 'numeric', month: '2-digit', day: '2-digit' })) + ' ' + toPersian(now.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+
+                    getEl('rep-name').innerText = state.name; 
+                    getEl('rep-time').innerText = dateTimeStr; 
+                    getEl('rep-games').innerText = toPersian(games); 
+                    getEl('rep-stars').innerText = toPersian(stars);
+
+                    const repReqStarsRow = getEl('portal-req-stars-row');
+                    if (repReqStarsRow) {
+                        repReqStarsRow.style.display = 'block';
+                        getEl('repReqStars').innerText = toPersian(Portal.requiredStars) + ' ⭐';
+                    }
+
+                    const goalBadge = getEl('portal-goal-reached-badge');
+                    const submitBadge = getEl('portal-submit-badge');
+                    const backInstruction = getEl('portal-back-instruction');
+                    const playAgainBtn = getEl('playAgainBtn');
+
+                    goalBadge.style.display = 'none';
+                    submitBadge.style.display = 'none';
+                    backInstruction.style.display = 'none';
+                    playAgainBtn.style.display = 'block';
+
+                    if (state.isTutorial || state.lastHelp) {
+                        getEl('rep-help').innerText = 'با کمک یا آموزشی';
+                        playAgainBtn.innerText = "بازی دوباره بدون کمک 💡";
+                        backInstruction.innerHTML = `
+                            <div style="background:#fff3e0; border:1px solid #ffe082; color:#e65100; padding:12px; border-radius:12px; margin-top:10px; font-size:11.5pt; line-height:1.6; text-align:center;">
+                                💡 این دور بازی‌ات آموزشی بود و برای گرفتن ستاره باید بدون کمک حلش کنی. دکمه پایین رو بزن تا بدون کمک تلاش کنی!
+                            </div>
+                        `;
+                        backInstruction.style.display = 'block';
+                    } else if (goalReached) {
+                        getEl('rep-help').innerText = 'مستقل';
+                        goalBadge.style.display = 'block';
+                        playAgainBtn.style.display = 'none';
+                        backInstruction.innerHTML = `
+                            <div style="background:#e8f5e9; border:1px solid #2e7d32; color:#1b5e20; padding:15px; border-radius:12px; margin-top:10px; font-weight:bold; font-size:12pt; line-height:1.6; text-align:center;">
+                                📱 آفرین! تکلیف با موفقیت تکمیل شد.<br>
+                                حالا با زدن <b>دکمه بازگشت (Back) گوشی</b> به پرتال کلاس برگرد.
+                            </div>
+                        `;
+                        backInstruction.style.display = 'block';
+                    } else {
+                        getEl('rep-help').innerText = 'مستقل';
+                        const remaining = Portal.requiredStars - stars;
+                        submitBadge.innerHTML = `✨ آفرین دانش‌آموز زرنگم! تو <b>${toPersian(stars)}</b> ستاره از <b>${toPersian(Portal.requiredStars)}</b> ستاره‌ی این تکلیف رو گرفتی! ⭐ فقط به <b>${toPersian(remaining)}</b> ستاره‌ی دیگه نیاز داری تا تیک تکلیف بخوره. بدو برو بعدی رو حل کن! 🏆`;
+                        submitBadge.style.display = 'block';
+                        playAgainBtn.innerText = "گرفتن ستاره بیشتر 🎮";
+                        backInstruction.innerHTML = `
+                            <div style="background:#fff3e0; border:1px solid #ffe082; color:#e65100; padding:12px; border-radius:12px; margin-top:10px; font-size:11.5pt; line-height:1.6; text-align:center;">
+                                💡 اگر می‌خواهی بعداً بازی کنی، با زدن <b>دکمه بازگشت (Back) گوشی</b> به پرتال برگرد.
+                            </div>
+                        `;
+                        backInstruction.style.display = 'block';
+                    }
+                } catch (e) {
+                    console.error(e);
+                }
+            }
+        };
 
         window.submitAssistantStar = async function() {
             showScreen('portal-submitting-screen');
@@ -1160,7 +1419,7 @@
                         state.stars = data.stars !== undefined ? data.stars : state.stars;
                         
                         saveProfile();
-                        app.updateStats();
+                        updateStats();
 
                         getEl('portal-student-name').textContent = state.name;
                         getEl('portal-prev-plays').textContent = toPersian(state.totalPlays);
@@ -1244,7 +1503,7 @@
                     game.start();
                 }
                 showScreen('screen-game');
-                app.updateStats();
+                updateStats();
                 saveProfile();
             } catch (e) {
                 clearGameState();
@@ -1253,7 +1512,7 @@
                 saveProfile();
                 game.start();
                 showScreen('screen-game');
-                app.updateStats();
+                updateStats();
                 saveProfile();
             }
         };
