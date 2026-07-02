@@ -1578,7 +1578,7 @@
                 
                 if (this.subStep === 'SELECT') {
                     if (this.stage === 0) this.msg('حالت آموزشی: برای شروع روی هزارتایی کلیک می‌کنیم.');
-                    else this.msg(`حالا عدد بعدی (${CONFIG.pvLabels[this.stage]}) رو پایین می‌آوریم.`);
+                    else this.msg(`حاله عدد بعدی (${CONFIG.pvLabels[this.stage]}) رو پایین می‌آوریم.`);
                 }
             },
 
@@ -1846,10 +1846,11 @@
             });
 
             if ('serviceWorker' in navigator) {
+                const hadExistingController = !!navigator.serviceWorker.controller;
                 navigator.serviceWorker.register('sw.js');
                 let refreshing = false;
                 navigator.serviceWorker.addEventListener('controllerchange', () => {
-                    if (!refreshing) {
+                    if (!refreshing && hadExistingController) {
                         window.location.reload();
                         refreshing = true;
                     }
