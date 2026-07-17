@@ -700,37 +700,6 @@
         const nowStr = () => new Date().toLocaleString('fa-IR', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
         const getEl = id => document.getElementById(id);
 
-        const ART_NUMS = {
-            '0': [[1,1,1],[1,0,1],[1,0,1],[1,0,1],[1,1,1]],
-            '1': [[0,1,0],[0,1,0],[0,1,0],[0,1,0],[0,1,0]],
-            '2': [[1,1,1],[0,0,1],[1,1,1],[1,0,0],[1,1,1]],
-            '3': [[1,1,1],[0,0,1],[1,1,1],[0,0,1],[1,1,1]],
-            '4': [[1,0,1],[1,0,1],[1,1,1],[0,0,1],[0,0,1]],
-            '5': [[1,1,1],[1,0,0],[1,1,1],[0,0,1],[1,1,1]],
-            '6': [[1,1,1],[1,0,0],[1,1,1],[1,0,1],[1,1,1]],
-            '7': [[1,1,1],[0,0,1],[0,0,1],[0,0,1],[0,0,1]],
-            '8': [[1,1,1],[1,0,1],[1,1,1],[1,0,1],[1,1,1]],
-            '9': [[1,1,1],[1,0,1],[1,1,1],[0,0,1],[1,1,1]]
-        };
-
-        const generateVerticalArt = (starsNum, minuteNum) => {
-            const starsStr = String(starsNum).padStart(2, '0');
-            const minuteStr = String(minuteNum).padStart(2, '0');
-            const E_WHITE = '⬜'; const E_STAR_ON = '⭐'; const E_TIME_ON = '⬛';
-            let art = '';
-            for (let row = 0; row < 13; row++) {
-                let line = '\u202A' + E_WHITE; 
-                if (row === 0 || row === 6 || row === 12) { line += E_WHITE.repeat(7); } else {
-                    let numStr, fillEmoji, fontRow;
-                    if (row >= 1 && row <= 5) { numStr = starsStr; fillEmoji = E_STAR_ON; fontRow = row - 1; } else { numStr = minuteStr; fillEmoji = E_TIME_ON; fontRow = row - 7; }
-                    const d1 = ART_NUMS[numStr[0]][fontRow]; line += d1.map(p => p ? fillEmoji : E_WHITE).join(''); line += E_WHITE;
-                    const d2 = ART_NUMS[numStr[1]][fontRow]; line += d2.map(p => p ? fillEmoji : E_WHITE).join('');
-                }
-                line += E_WHITE + '\u202C'; art += line + '\n';
-            }
-            return art;
-        };
-
         const app = {
             state: { user: null, stats: { games: 0, stars: 0 }, lastHelp: false, isTutorial: false, reportShown: false },
             init() {
@@ -907,8 +876,12 @@
                     else if (this.subStep === 'SUBTRACT') { this.msg('تفریق کن (از راست).'); } else { this.msg('بازیابی شد. ادامه بده.'); }
                 }
                 
-                if (this.subStep !== 'SELECT' && this.stage < 4) this.showBracket(this.stage);
                 this.updateSelectHighlight(); 
+                if (this.subStep !== 'SELECT' && this.stage < 4) {
+                    setTimeout(() => {
+                        this.showBracket(this.stage);
+                    }, 200);
+                }
             },
             clearState() { localStorage.removeItem(GAME_STATE_STORAGE); },
 
@@ -929,14 +902,42 @@
                 getEl('math-area').innerHTML = ''; getEl('dividend-row').innerHTML = ''; getEl('quotient-row').innerHTML = ''; getEl('divisor-display').innerText = toPersian(this.divisor);
                 for(let i=0; i<4; i++) { const b = document.createElement('div'); b.className = 'box readonly'; b.innerText = toPersian(this.digits[i]); b.id = `div-${i}`; b.onclick = () => this.clkDividend(i); getEl('dividend-row').appendChild(b); }
                 for (let i = 0; i < 4; i++) { const b = document.createElement('div'); b.className = `box ${CONFIG.pvClasses[i]}`; b.id = `q-${i}`; b.innerHTML = `<span class="pv-label">${CONFIG.pvLabels[i]}</span><span class="val"></span>`; b.onclick = () => this.activate(b.id); getEl('quotient-row').appendChild(b); }
+                
                 this.mathSteps.forEach((step, idx) => {
-                    if (step.q !== null) { const qBox = getEl(`q-${idx}`); qBox.querySelector('.val').innerText = toPersian(step.q); qBox.classList.add('has-val', 'readonly', 'correct'); }
+                    if (step.q !== null) { 
+                        const qBox = getEl(`q-${idx}`); 
+                        qBox.querySelector('.val').innerText = toPersian(step.q); 
+                        qBox.classList.add('has-val'); 
+                        let isLocked = (idx < this.stage) || (idx === this.stage && (this.subStep === 'SUBTRACT' || this.subStep === 'FINISH'));
+                        if (isLocked) {
+                            qBox.classList.add('readonly', 'correct');
+                        } else if (this.isFailedStep && idx === this.stage && this.subStep === 'MULTIPLY_P') {
+                            qBox.classList.add('wrong');
+                        }
+                    }
                     if (step.p.some(v => v !== '') || (idx === this.stage && this.subStep !== 'SELECT')) {
                         if (step.q !== 0 && step.q !== null) {
-                            this.createProductRow(idx); step.p.forEach((val, i) => { if (val !== '') setBoxVal(`p-${idx}-${i}`, val, (this.subStep !== 'MULTIPLY_P' || idx < this.stage)); });
+                            this.createProductRow(idx); 
+                            step.p.forEach((val, i) => { 
+                                if (val !== '') {
+                                    let pLocked = (idx < this.stage) || (idx === this.stage && (this.subStep === 'SUBTRACT' || this.subStep === 'FINISH'));
+                                    setBoxVal(`p-${idx}-${i}`, val, pLocked);
+                                    if (!pLocked && this.isFailedStep && idx === this.stage && this.subStep === 'MULTIPLY_P') {
+                                        getEl(`p-${idx}-${i}`).classList.add('wrong');
+                                    }
+                                }
+                            });
                             if (idx < this.stage || this.subStep === 'SUBTRACT' || this.subStep === 'FINISH') {
                                 this.createRemainderRow(idx);
-                                step.r.forEach((val, i) => { if (val !== '') setBoxVal(`r-${idx}-${i}`, val, (idx < this.stage)); });
+                                step.r.forEach((val, i) => { 
+                                    if (val !== '') {
+                                        let rLocked = (idx < this.stage) || (idx === this.stage && this.subStep === 'FINISH');
+                                        setBoxVal(`r-${idx}-${i}`, val, rLocked);
+                                        if (!rLocked && this.isFailedStep && idx === this.stage && this.subStep === 'SUBTRACT') {
+                                            getEl(`r-${idx}-${i}`).classList.add('wrong');
+                                        }
+                                    }
+                                });
                             }
                             if(idx < this.stage) { const pRow = getEl(`row-p-${idx}`); if(pRow) pRow.classList.add('dimmed'); }
                         }
@@ -1063,8 +1064,6 @@
                 if(!app.state.isTutorial) this.msg('قرض گرفته شد. حالا تفریق کن.');
             },
 
-            getLatestTargetRow() { if (this.lastRemRowIndex === -1) return { type: 'top', idx: -1 }; return { type: 'rem', idx: this.lastRemRowIndex }; },
-
             updateSelectHighlight() {
                 document.querySelectorAll('.action-target').forEach(el => el.classList.remove('action-target'));
                 if (this.subStep === 'SELECT') { getEl(`div-${this.stage}`).classList.add('action-target'); }
@@ -1132,6 +1131,7 @@
                     }
                     
                     this.subStep = 'QUOTIENT';
+                    this.activeBox = null;
                     this.activate(`q-${this.stage}`);
                     this.msg('خارج قسمت را دوباره وارد کن.');
                 } 
@@ -1149,6 +1149,7 @@
                     if (rRow) {
                         const visibleBoxes = Array.from(rRow.querySelectorAll('.box:not(.invisible-box)'));
                         if (visibleBoxes.length > 0) {
+                            this.activeBox = null;
                             this.activate(visibleBoxes[visibleBoxes.length - 1].id);
                         }
                     }
@@ -1230,18 +1231,35 @@
 
             activate(id) {
                 if (app.state.isTutorial) return; 
-                if (getEl(id).classList.contains('readonly')) return; if (getEl(id).classList.contains('invisible-box')) return;
+                const targetEl = getEl(id);
+                if (!targetEl || targetEl.classList.contains('readonly') || targetEl.classList.contains('invisible-box')) return;
+                
                 const parts = id.split('-'); 
                 if (parts[0] === 'q') { 
                     const idx = parseInt(parts[1]); 
                     if (idx !== this.stage) return; 
                     if (this.subStep !== 'QUOTIENT') return; 
                 }
-                if (this.activeBox) getEl(this.activeBox).classList.remove('active-input'); this.activeBox = id; getEl(id).classList.add('active-input'); getEl('number-pad').classList.remove('hidden');
-                setTimeout(() => getEl(id).scrollIntoView({behavior: "smooth", block: "center", inline: "nearest"}), 100);
+                
+                if (this.activeBox) {
+                    const prevEl = getEl(this.activeBox);
+                    if (prevEl) prevEl.classList.remove('active-input');
+                }
+                
+                this.activeBox = id; 
+                targetEl.classList.add('active-input'); 
+                getEl('number-pad').classList.remove('hidden');
+                setTimeout(() => targetEl.scrollIntoView({behavior: "smooth", block: "center", inline: "nearest"}), 100);
             },
 
-            hideNumberPad() { getEl('number-pad').classList.add('hidden'); if (this.activeBox) getEl(this.activeBox).classList.remove('active-input'); this.activeBox = null; },
+            hideNumberPad() { 
+                getEl('number-pad').classList.add('hidden'); 
+                if (this.activeBox) {
+                    const el = getEl(this.activeBox);
+                    if (el) el.classList.remove('active-input');
+                }
+                this.activeBox = null; 
+            },
 
             inputDigit(n) {
                 if (this.isFailedStep) {
@@ -1308,6 +1326,7 @@
                         }
                         
                         this.subStep = 'QUOTIENT';
+                        this.activeBox = null;
                         this.activate(`q-${this.stage}`);
                         this.msg('خارج قسمت را وارد کن.');
                         this.updateCheckBtn();
@@ -1331,6 +1350,7 @@
                         if (rRow) {
                             const visibleBoxes = Array.from(rRow.querySelectorAll('.box:not(.invisible-box)'));
                             if (visibleBoxes.length > 0) {
+                                this.activeBox = null;
                                 this.activate(visibleBoxes[visibleBoxes.length - 1].id);
                             }
                         }
@@ -1343,6 +1363,8 @@
 
                 if(!this.activeBox) return;
                 const el = getEl(this.activeBox);
+                if (!el) return;
+                
                 const [type, stg, idx] = this.activeBox.split('-');
                 const s = parseInt(stg);
                 const i = parseInt(idx);
@@ -1522,8 +1544,16 @@
             msg(txt, err = false) { const el = getEl('game-message'); el.innerText = txt; el.style.borderColor = err ? '#dc3545' : '#f0ad4e'; el.style.color = err ? '#721c24' : '#8a6d3b'; el.style.background = err ? '#f8d7da' : '#fdf6e3'; },
 
             showBracket(idx) {
-                let startEl = null; let endEl = null; const targetInfo = this.getLatestTargetRow();
-                if (targetInfo.type === 'top') { 
+                if (this.subStep === 'FINISH') {
+                    const b = getEl('bracket');
+                    if (b) b.style.display = 'none';
+                    return;
+                }
+
+                let startEl = null; let endEl = null; 
+                const prevRemIdx = this.getLastActiveRowIdx(idx);
+                
+                if (prevRemIdx === -1) { 
                     let start = idx; 
                     for(let i = idx-1; i>=0; i--) { 
                         if (this.mathSteps[i].q === 0) start = i; 
@@ -1533,10 +1563,9 @@
                     endEl = getEl(`div-${idx}`); 
                 } 
                 else {
-                    const rIdx = targetInfo.idx;
-                    const rRow = getEl(`row-r-${rIdx}`);
+                    const rRow = getEl(`row-r-${prevRemIdx}`);
                     if(rRow) {
-                        const visibleBoxes = Array.from(rRow.querySelectorAll('.box:not(.invisible-box)'));
+                        const visibleBoxes = Array.from(rRow.querySelectorAll('.box:not(.invisible-box)')).filter(b => b.innerText.trim() !== '');
                         if(visibleBoxes.length > 0) {
                             let startIndex = 0;
                             while(startIndex < visibleBoxes.length - 1) {
@@ -1548,15 +1577,27 @@
                         }
                     }
                 }
+                
                 const b = getEl('bracket'); const panel = getEl('left-panel');
                 if (!startEl || !endEl || !b || !panel) return;
-                const pRect = panel.getBoundingClientRect(); const d1Rect = startEl.getBoundingClientRect(); const d2Rect = endEl.getBoundingClientRect();
-                const left = d1Rect.left - pRect.left + panel.scrollLeft; const width = (d2Rect.left - d1Rect.left) + d2Rect.width;
-                b.style.display = 'block'; b.style.left = `${left}px`; b.style.width = `${width}px`; 
-                const topOffset = d1Rect.top - pRect.top + panel.scrollTop; b.style.top = `${topOffset - 5}px`; 
+                
+                const pRect = panel.getBoundingClientRect(); 
+                const d1Rect = startEl.getBoundingClientRect(); 
+                const d2Rect = endEl.getBoundingClientRect();
+                const left = d1Rect.left - pRect.left + panel.scrollLeft; 
+                const width = (d2Rect.left - d1Rect.left) + d2Rect.width;
+                
+                b.style.display = 'block'; 
+                b.style.left = `${left}px`; 
+                b.style.width = `${width}px`; 
+                const topOffset = d1Rect.top - pRect.top + panel.scrollTop; 
+                b.style.top = `${topOffset - 5}px`; 
+                
                 b.className = `bracket-container ${CONFIG.pvClasses[idx]}`;
                 b.style.borderColor = 'var(--pv-color)';
-                let lbl = b.querySelector('.bracket-label'); if(!lbl) { lbl = document.createElement('span'); lbl.className = 'bracket-label'; b.appendChild(lbl); } lbl.innerText = CONFIG.pvLabels[idx];
+                let lbl = b.querySelector('.bracket-label'); 
+                if(!lbl) { lbl = document.createElement('span'); lbl.className = 'bracket-label'; b.appendChild(lbl); } 
+                lbl.innerText = CONFIG.pvLabels[idx];
             },
             
             requestHelp() {
@@ -1841,6 +1882,15 @@
 
         window.onload = () => {
             app.init();
+            
+            window.addEventListener('resize', () => {
+                if (app.state && document.getElementById('screen-game') && !document.getElementById('screen-game').classList.contains('hidden')) {
+                    if (game.subStep !== 'SELECT' && game.stage < 4) {
+                        game.showBracket(game.stage);
+                    }
+                }
+            });
+
             window.addEventListener('beforeunload', () => {
                 if (app.state && app.state.user) app.save();
             });
